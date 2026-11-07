@@ -1,0 +1,27 @@
+[project]
+name = "dieu-khien-led-demo-web"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Le Quang My", email = "lequangmy5522@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "flet>=1.1.2",
+]
+
+[project.scripts]
+dieu-khien-led-demo-web = "dieu_khien_led_demo_web:main"
+
+[build-system]
+requires = ["uv_build>=0.13.7,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "flet-cli>=1.1.2",
+    "flet-desktop>=1.1.2",
+    "flet-web>=1.1.2",
+    "flet[test]>=1.1.2",
+]

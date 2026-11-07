@@ -445,7 +445,7 @@ def build_view(page: ft.Page) -> ft.Column:
         state["page"] = new_p
         refresh_view()
 
-    def refresh_view():
+    def refresh_view(update_page: bool = True):
         role = data.get_current_role()
         can_preview = permissions.can(role, "contents", "preview")
         can_edit = permissions.can(role, "contents", "edit")
@@ -458,7 +458,8 @@ def build_view(page: ft.Page) -> ft.Column:
             content_display_area.controls = [
                 create_empty_state("Không có tệp nội dung nào khớp với bộ lọc hiện tại.")
             ]
-            page.update()
+            if update_page:
+                page.update()
             return
 
         if state["view_mode"] == "grid":
@@ -618,7 +619,8 @@ def build_view(page: ft.Page) -> ft.Column:
                 ),
                 create_pagination_bar(len(filtered), cur_p, page_size, change_page),
             ]
-        page.update()
+        if update_page:
+            page.update()
 
     def set_view_mode(mode: str):
         state["view_mode"] = mode
@@ -668,7 +670,7 @@ def build_view(page: ft.Page) -> ft.Column:
             )
         )
 
-    refresh_view()
+    refresh_view(update_page=False)
 
     return ft.Column(
         expand=True,

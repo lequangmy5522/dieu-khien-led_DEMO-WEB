@@ -67,7 +67,7 @@ def make_text_field(
     min_lines: int = 1,
     max_lines: int = 1,
     width: float | None = None,
-    expand: bool = False,
+    expand: bool | int | None = None,
     on_change=None,
     on_submit=None,
 ) -> ft.TextField:
@@ -83,7 +83,7 @@ def make_text_field(
         min_lines=min_lines,
         max_lines=max_lines,
         width=width,
-        expand=expand,
+        expand=expand if expand else None,
         text_size=theme.TEXT_14,
         label_style=ft.TextStyle(size=theme.TEXT_12, color=theme.text_secondary()),
         hint_style=ft.TextStyle(size=theme.TEXT_14, color=theme.text_secondary()),
@@ -123,7 +123,7 @@ def make_dropdown(
     value: str | None = None,
     on_change=None,
     width: float | None = None,
-    expand: bool = False,
+    expand: bool | int | None = None,
 ) -> ft.Dropdown:
     """Tạo Dropdown bo góc 6px, viền mảnh."""
     dd_options = []
@@ -146,7 +146,7 @@ def make_dropdown(
         "content_padding": pad_sym(horizontal=theme.SPACE_12, vertical=theme.SPACE_8),
         "dense": True,
         "width": width,
-        "expand": expand,
+        "expand": expand if expand else None,
     }
     if on_change is not None:
         if "on_select" in ft.Dropdown.__init__.__code__.co_varnames:
@@ -214,12 +214,12 @@ def make_surface_box(
     content: ft.Control,
     padding: int = theme.SPACE_16,
     col: dict | int | None = None,
-    expand: bool = False,
+    expand: bool | int | None = None,
 ) -> ft.Container:
     """Khung bề mặt phẳng viền 1px, bo góc 8px, không dùng bóng đổ dày."""
     return ft.Container(
         col=col,
-        expand=expand,
+        expand=expand if expand else None,
         padding=padding,
         bgcolor=theme.surface_color(),
         border=border_all(theme.BORDER_WIDTH, theme.border_color()),

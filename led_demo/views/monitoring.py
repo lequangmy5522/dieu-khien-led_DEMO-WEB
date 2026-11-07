@@ -119,7 +119,7 @@ def build_view(page: ft.Page) -> ft.Column:
             ),
         )
 
-    def refresh_monitoring():
+    def refresh_monitoring(update_page: bool = True):
         build_issues_alert_box()
         st_filter = filter_state["status"]
         filtered = [
@@ -131,7 +131,8 @@ def build_view(page: ft.Page) -> ft.Column:
 
         if not filtered:
             devices_grid_area.controls = [create_empty_state("Không có thiết bị nào ở trạng thái này.")]
-            page.update()
+            if update_page:
+                page.update()
             return
 
         cards = []
@@ -225,7 +226,8 @@ def build_view(page: ft.Page) -> ft.Column:
         devices_grid_area.controls = [
             ft.ResponsiveRow(spacing=theme.SPACE_16, run_spacing=theme.SPACE_16, controls=cards)
         ]
-        page.update()
+        if update_page:
+            page.update()
 
     def handle_refresh_metrics(e):
         if not permissions.can(data.get_current_role(), "monitoring", "refresh"):
@@ -257,7 +259,7 @@ def build_view(page: ft.Page) -> ft.Column:
             )
         )
 
-    refresh_monitoring()
+    refresh_monitoring(update_page=False)
 
     return ft.Column(
         expand=True,

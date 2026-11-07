@@ -37,7 +37,7 @@ NAV_ITEMS = [
 
 def main(page: ft.Page):
     """Khởi tạo ứng dụng quản trị màn hình LED."""
-    page.title = "VietLED CMS - Quản trị hệ thống màn hình LED"
+    page.title = "Toàn Trung CMS - Công Ty Cổ Phần Điện Tử Viễn Thông Toàn Trung"
     page.padding = 0
     page.spacing = 0
 
@@ -50,7 +50,10 @@ def main(page: ft.Page):
 
     sync_page_theme()
 
-    state = {"selected_index": 0, "in_shell": False}
+    state = {
+        "selected_index": data.APP_STATE.get("selected_index", 0),
+        "in_shell": bool(data.APP_STATE.get("is_authenticated", False)),
+    }
 
     content_area = ft.Container(
         expand=True,
@@ -83,6 +86,8 @@ def main(page: ft.Page):
     def handle_logout(e=None):
         """Đăng xuất về màn hình đăng nhập."""
         data.log_activity("Đã đăng xuất khỏi hệ thống.")
+        data.APP_STATE["is_authenticated"] = False
+        data.APP_STATE["selected_index"] = 0
         state["in_shell"] = False
         state["selected_index"] = 0
         show_login_screen()
@@ -174,14 +179,14 @@ def main(page: ft.Page):
                                         if hasattr(ft.Alignment, "CENTER")
                                         else ft.alignment.center,
                                         content=ft.Text(
-                                            "VL",
+                                            "TT",
                                             size=theme.TEXT_12,
                                             weight=theme.WEIGHT_SEMI,
                                             color=theme.WHITE,
                                         ),
                                     ),
                                     ft.Text(
-                                        "VietLED CMS",
+                                        "Toàn Trung CMS",
                                         size=theme.TEXT_16,
                                         weight=theme.WEIGHT_SEMI,
                                         color=theme.text_primary(),
@@ -219,7 +224,7 @@ def main(page: ft.Page):
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
                 ft.Text(
-                    "Hệ thống quản lý vận hành màn hình LED",
+                    "Công Ty Cổ Phần Điện Tử Viễn Thông Toàn Trung – Hệ thống quản lý màn hình LED",
                     size=theme.TEXT_14,
                     color=theme.text_secondary(),
                 ),
@@ -272,6 +277,7 @@ def main(page: ft.Page):
         target_page_key = NAV_ITEMS[index][0]
         if target_page_key not in allowed_pages:
             state["selected_index"] = 0
+            data.APP_STATE["selected_index"] = 0
             refresh_header_user()
             build_sidebar_items()
             content_area.content = dashboard.build_view(page, on_navigate=navigate_to)
@@ -280,6 +286,7 @@ def main(page: ft.Page):
             return
 
         state["selected_index"] = index
+        data.APP_STATE["selected_index"] = index
         refresh_header_user()
         build_sidebar_items()
 
@@ -302,10 +309,12 @@ def main(page: ft.Page):
         content_area.content = builder()
         page.update()
 
-    def show_main_shell():
+    def show_main_shell(initial_index: int = 0):
         """Dựng lại toàn bộ bố cục chính theo vai trò mới sau khi đăng nhập."""
         state["in_shell"] = True
-        state["selected_index"] = 0
+        state["selected_index"] = initial_index
+        data.APP_STATE["is_authenticated"] = True
+        data.APP_STATE["selected_index"] = initial_index
         page.controls.clear()
         rebuild_shell_chrome()
         page.add(
@@ -325,16 +334,20 @@ def main(page: ft.Page):
                 ],
             )
         )
-        navigate_to(0)
+        navigate_to(initial_index)
 
     def show_login_screen():
         """Hiển thị màn hình đăng nhập."""
         state["in_shell"] = False
+        data.APP_STATE["is_authenticated"] = False
         page.controls.clear()
         page.add(login.build_view(page, on_login_success=show_main_shell))
         page.update()
 
-    show_login_screen()
+    if data.APP_STATE.get("is_authenticated", False):
+        show_main_shell(initial_index=data.APP_STATE.get("selected_index", 0))
+    else:
+        show_login_screen()
 
 
 if __name__ == "__main__":

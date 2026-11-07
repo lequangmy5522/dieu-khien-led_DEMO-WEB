@@ -7,12 +7,12 @@ from permissions import ROLE_ADMIN, ROLE_EDITOR, ROLE_VIEWER
 # ==============================================================================
 
 COMPANY_INFO = {
-    "name": "Công ty Cổ phần Giải pháp Hiển thị & Truyền thông số VietLED",
-    "code": "0108472915",
-    "address": "Tầng 8, Tòa nhà TTC, Số 19 Duy Tân, Cầu Giấy, Hà Nội",
-    "hotline": "(024) 3795 8821 – Nhánh kỹ thuật: 104",
-    "email": "vanhanh@vietled.com.vn",
-    "website": "https://cms.vietled.com.vn",
+    "name": "Công Ty Cổ Phần Điện Tử Viễn Thông Toàn Trung",
+    "code": "0304604194",
+    "address": "710/58 Lũy Bán Bích, P. Tân Thành, Q. Tân Phú, TP.HCM (VPGD: 31 Đường số 18, P. Phú Thọ Hòa, Q. Tân Phú)",
+    "hotline": "(028) 3812 2456 – Hotline kỹ thuật: 0918 771 713",
+    "email": "toantrungco@gmail.com",
+    "website": "https://toantrung.com.vn",
     "version": "v2.4.1-internal (Build 2026.10)",
 }
 
@@ -30,7 +30,7 @@ USERS_DATA = [
         "username": "admin",
         "password": "123456",
         "full_name": "Nguyễn Đức Minh",
-        "email": "minh.nd@vietled.com.vn",
+        "email": "minh.nd@toantrung.com.vn",
         "phone": "0904 812 305",
         "role": ROLE_ADMIN,
         "active": True,
@@ -41,7 +41,7 @@ USERS_DATA = [
         "username": "bientap",
         "password": "123456",
         "full_name": "Trần Thị Minh Châu",
-        "email": "chau.ttm@vietled.com.vn",
+        "email": "chau.ttm@toantrung.com.vn",
         "phone": "0917 209 441",
         "role": ROLE_EDITOR,
         "active": True,
@@ -52,7 +52,7 @@ USERS_DATA = [
         "username": "xem",
         "password": "123456",
         "full_name": "Đỗ Thu Hà",
-        "email": "ha.dt@vietled.com.vn",
+        "email": "ha.dt@toantrung.com.vn",
         "phone": "0972 508 613",
         "role": ROLE_VIEWER,
         "active": True,
@@ -63,7 +63,7 @@ USERS_DATA = [
         "username": "kythuat.miennam",
         "password": "123456",
         "full_name": "Phạm Văn Hùng",
-        "email": "hung.pv@vietled.com.vn",
+        "email": "hung.pv@toantrung.com.vn",
         "phone": "0938 114 702",
         "role": ROLE_ADMIN,
         "active": True,
@@ -74,7 +74,7 @@ USERS_DATA = [
         "username": "nam.lh",
         "password": "123456",
         "full_name": "Lê Hoàng Nam",
-        "email": "nam.lh@vietled.com.vn",
+        "email": "nam.lh@toantrung.com.vn",
         "phone": "0983 651 920",
         "role": ROLE_EDITOR,
         "active": True,
@@ -85,7 +85,7 @@ USERS_DATA = [
         "username": "khanh.vq",
         "password": "123456",
         "full_name": "Vũ Quốc Khánh",
-        "email": "khanh.vq@vietled.com.vn",
+        "email": "khanh.vq@toantrung.com.vn",
         "phone": "0966 319 084",
         "role": ROLE_VIEWER,
         "active": False,
@@ -98,6 +98,8 @@ CURRENT_USER = USERS_DATA[0].copy()
 
 APP_STATE = {
     "current_user": CURRENT_USER,
+    "is_authenticated": False,
+    "selected_index": 0,
 }
 
 
@@ -106,6 +108,7 @@ def set_current_user(user_dict: dict):
     CURRENT_USER.clear()
     CURRENT_USER.update(user_dict)
     APP_STATE["current_user"] = CURRENT_USER
+    APP_STATE["is_authenticated"] = True
 
 
 def get_current_role() -> str:

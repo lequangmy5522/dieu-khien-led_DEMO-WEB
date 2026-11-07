@@ -67,7 +67,7 @@ def build_view(page: ft.Page) -> ft.Column:
     def get_current_screen() -> dict | None:
         return data.get_screen_by_id(state["screen_id"])
 
-    def update_preview_and_controls():
+    def update_preview_and_controls(update_page: bool = True):
         scr = get_current_screen()
         if not scr:
             return
@@ -128,7 +128,8 @@ def build_view(page: ft.Page) -> ft.Column:
                 ],
             ),
         )
-        page.update()
+        if update_page:
+            page.update()
 
     async def simulate_power_command(action_type: str):
         """Khóa các nút nguồn và đổi chữ hiển thị trạng thái xử lý trong 2 giây."""
@@ -302,7 +303,7 @@ def build_view(page: ft.Page) -> ft.Column:
         expand=True,
     )
 
-    update_preview_and_controls()
+    update_preview_and_controls(update_page=False)
 
     return ft.Column(
         expand=True,

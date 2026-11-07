@@ -306,7 +306,7 @@ def build_view(page: ft.Page) -> ft.Column:
         filter_state["page"] = new_page
         refresh_table()
 
-    def refresh_table():
+    def refresh_table(update_page: bool = True):
         role = data.get_current_role()
         can_detail = permissions.can(role, "screens", "detail")
         can_edit = permissions.can(role, "screens", "edit")
@@ -324,7 +324,8 @@ def build_view(page: ft.Page) -> ft.Column:
             table_container.controls = [
                 create_empty_state("Không tìm thấy màn hình LED nào khớp với từ khóa hoặc trạng thái đã chọn.")
             ]
-            page.update()
+            if update_page:
+                page.update()
             return
 
         rows = []
@@ -405,7 +406,8 @@ def build_view(page: ft.Page) -> ft.Column:
             ),
             create_pagination_bar(len(filtered), cur_p, page_size, change_page),
         ]
-        page.update()
+        if update_page:
+            page.update()
 
     def on_search_change(e):
         filter_state["keyword"] = e.control.value or ""
@@ -437,7 +439,7 @@ def build_view(page: ft.Page) -> ft.Column:
             )
         )
 
-    refresh_table()
+    refresh_table(update_page=False)
 
     return ft.Column(
         expand=True,

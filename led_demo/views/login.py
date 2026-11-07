@@ -107,14 +107,14 @@ def build_view(page: ft.Page, on_login_success) -> ft.Container:
                                 bgcolor=theme.accent_color(),
                                 alignment=ALIGN_CENTER,
                                 content=ft.Text(
-                                    "VL",
+                                    "TT",
                                     size=theme.TEXT_12,
                                     weight=theme.WEIGHT_SEMI,
                                     color=theme.WHITE,
                                 ),
                             ),
                             ft.Text(
-                                "VietLED CMS",
+                                "Toàn Trung CMS",
                                 size=theme.TEXT_16,
                                 weight=theme.WEIGHT_SEMI,
                                 color=theme.text_primary(),
@@ -131,7 +131,7 @@ def build_view(page: ft.Page, on_login_success) -> ft.Container:
                                 color=theme.text_primary(),
                             ),
                             ft.Text(
-                                "Hệ thống điều khiển màn hình LED nội bộ",
+                                "Công Ty Cổ Phần Điện Tử Viễn Thông Toàn Trung",
                                 size=theme.TEXT_12,
                                 color=theme.text_secondary(),
                             ),

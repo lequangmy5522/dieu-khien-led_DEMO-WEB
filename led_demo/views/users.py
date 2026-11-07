@@ -93,7 +93,7 @@ def build_view(page: ft.Page, on_user_updated=None) -> ft.Column:
         )
         email_field = make_text_field(
             value=user_to_edit["email"] if is_edit else "",
-            hint_text="VD: nam.lh@vietled.com.vn",
+            hint_text="VD: nam.lh@toantrung.com.vn",
         )
         phone_field = make_text_field(
             value=user_to_edit["phone"] if is_edit else "",
@@ -319,7 +319,7 @@ def build_view(page: ft.Page, on_user_updated=None) -> ft.Column:
         filter_state["page"] = new_p
         refresh_table()
 
-    def refresh_table():
+    def refresh_table(update_page: bool = True):
         cur_role = data.get_current_role()
         can_lock = permissions.can(cur_role, "users", "lock")
         can_edit = permissions.can(cur_role, "users", "edit")
@@ -330,7 +330,8 @@ def build_view(page: ft.Page, on_user_updated=None) -> ft.Column:
             table_container.controls = [
                 create_empty_state("Không tìm thấy tài khoản nào phù hợp.")
             ]
-            page.update()
+            if update_page:
+                page.update()
             return
 
         page_size = int(data.SYSTEM_SETTINGS.get("rows_per_page", "10"))
@@ -412,7 +413,8 @@ def build_view(page: ft.Page, on_user_updated=None) -> ft.Column:
             ),
             create_pagination_bar(len(filtered), cur_p, page_size, change_page),
         ]
-        page.update()
+        if update_page:
+            page.update()
 
     search_box = create_search_field(
         "Tìm theo tên, tài khoản, email, SĐT...",
@@ -437,7 +439,7 @@ def build_view(page: ft.Page, on_user_updated=None) -> ft.Column:
             )
         )
 
-    refresh_table()
+    refresh_table(update_page=False)
 
     return ft.Column(
         expand=True,

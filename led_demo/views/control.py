@@ -1,46 +1,73 @@
 import asyncio
 import flet as ft
 import data
+import permissions
+import theme
 from components import (
-    PRIMARY_COLOR,
-    PRIMARY_LIGHT,
     ALIGN_CENTER,
     border_all,
+    create_access_denied_view,
     create_page_header,
     create_status_badge,
     make_dropdown,
-    pad_sym,
+    make_form_field,
+    make_primary_button,
+    make_secondary_button,
+    make_surface_box,
     show_snack,
 )
 
 
 def build_view(page: ft.Page) -> ft.Column:
-    """Xây dựng giao diện Điều khiển màn hình LED trực tiếp (Nguồn, Độ sáng, Âm lượng, Đổi nội dung)."""
+    """Trang Điều khiển màn hình: chọn thiết bị, bật/tắt/khởi động lại (trạng thái xử lý ở nút), độ sáng, âm lượng."""
+    role = data.get_current_role()
+    if not permissions.can(role, "control", "view"):
+        return ft.Column(
+            expand=True,
+            controls=[create_access_denied_view(page)],
+        )
+
+    can_power = permissions.can(role, "control", "power")
+    can_playback = permissions.can(role, "control", "playback")
+    can_change_content = permissions.can(role, "control", "change_content")
+    can_brightness = permissions.can(role, "control", "brightness")
+    can_volume = permissions.can(role, "control", "volume")
+
     selected_id = data.SCREENS_DATA[0]["id"] if data.SCREENS_DATA else None
     state = {
         "screen_id": selected_id,
         "is_busy": False,
     }
 
-    busy_indicator = ft.Row(
-        visible=False,
-        spacing=10,
-        controls=[
-            ft.ProgressRing(width=18, height=18, stroke_width=2.5, color=PRIMARY_COLOR),
-            ft.Text("Đang gửi lệnh điều khiển tới thiết bị (chờ 2 giây)...", size=13, color=PRIMARY_COLOR, weight=ft.FontWeight.W_600),
-        ],
-    )
-
-    status_badges_row = ft.Row(spacing=10)
+    status_badges_row = ft.Row(spacing=theme.SPACE_16, wrap=True)
     preview_box = ft.Container()
-    brightness_label = ft.Text("", weight=ft.FontWeight.BOLD, size=14, color=PRIMARY_COLOR)
-    volume_label = ft.Text("", weight=ft.FontWeight.BOLD, size=14, color=PRIMARY_COLOR)
+    brightness_label = ft.Text("", weight=theme.WEIGHT_SEMI, size=theme.TEXT_14, width=48)
+    volume_label = ft.Text("", weight=theme.WEIGHT_SEMI, size=theme.TEXT_14, width=48)
+
+    power_tooltip = None if can_power else "Cần quyền Quản trị viên"
+    power_on_btn = make_primary_button(
+        "Bật nguồn",
+        on_click=lambda e: trigger_power("power_on"),
+        disabled=not can_power,
+        tooltip=power_tooltip,
+    )
+    power_off_btn = make_secondary_button(
+        "Tắt nguồn",
+        on_click=lambda e: trigger_power("power_off"),
+        disabled=not can_power,
+        tooltip=power_tooltip,
+    )
+    restart_btn = make_secondary_button(
+        "Khởi động lại",
+        on_click=lambda e: trigger_power("restart"),
+        disabled=not can_power,
+        tooltip=power_tooltip,
+    )
 
     def get_current_screen() -> dict | None:
         return data.get_screen_by_id(state["screen_id"])
 
     def update_preview_and_controls():
-        """Đồng bộ thông tin màn hình đang chọn lên khung xem trước và các thanh trượt."""
         scr = get_current_screen()
         if not scr:
             return
@@ -48,7 +75,11 @@ def build_view(page: ft.Page) -> ft.Column:
         status_badges_row.controls = [
             create_status_badge(scr["status"]),
             create_status_badge(scr["playing_state"]),
-            ft.Text(f"Nhiệt độ: {scr['temperature']}°C | Độ phân giải: {scr['resolution']}", size=12, color=ft.Colors.GREY_600),
+            ft.Text(
+                f"Nhiệt độ: {scr['temperature']}°C  |  {scr['resolution']}",
+                size=theme.TEXT_12,
+                color=theme.text_secondary(),
+            ),
         ]
 
         brightness_slider.value = scr["brightness"]
@@ -62,37 +93,37 @@ def build_view(page: ft.Page) -> ft.Column:
         is_video = content_obj and content_obj["type"] == "Video"
 
         preview_box.content = ft.Container(
-            height=250,
-            border_radius=14,
-            bgcolor=ft.Colors.INDIGO_900 if is_online else ft.Colors.GREY_900,
-            border=border_all(3, PRIMARY_COLOR if is_online else ft.Colors.GREY_600),
-            padding=20,
+            height=240,
+            border_radius=theme.RADIUS_CARD,
+            bgcolor=theme.surface_subtle_color(),
+            border=border_all(theme.BORDER_WIDTH, theme.border_color()),
+            padding=theme.SPACE_24,
             alignment=ALIGN_CENTER,
             content=ft.Column(
                 alignment=ft.MainAxisAlignment.CENTER,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=8,
+                spacing=theme.SPACE_8,
                 controls=[
                     ft.Icon(
-                        ft.Icons.PLAY_CIRCLE_FILL
+                        ft.Icons.PLAY_CIRCLE_OUTLINE
                         if (is_online and is_video)
-                        else (ft.Icons.IMAGE_ROUNDED if is_online else ft.Icons.POWER_OFF_ROUNDED),
-                        color=ft.Colors.WHITE if is_online else ft.Colors.GREY_500,
-                        size=54,
+                        else (ft.Icons.IMAGE_OUTLINED if is_online else ft.Icons.POWER_OFF_OUTLINED),
+                        color=theme.accent_color() if is_online else theme.text_secondary(),
+                        size=32,
                     ),
                     ft.Text(
-                        content_obj["name"] if (is_online and content_obj) else "MÀN HÌNH ĐANG TẮT / OFFLINE",
-                        color=ft.Colors.WHITE,
-                        size=17,
-                        weight=ft.FontWeight.BOLD,
+                        content_obj["name"] if (is_online and content_obj) else "Thiết bị đang tắt hoặc mất kết nối",
+                        color=theme.text_primary(),
+                        size=theme.TEXT_16,
+                        weight=theme.WEIGHT_SEMI,
                         text_align=ft.TextAlign.CENTER,
                     ),
                     ft.Text(
-                        f"Trạng thái: {scr['playing_state']} • Độ sáng: {int(scr['brightness'])}% • Âm lượng: {int(scr['volume'])}%"
+                        f"{scr['playing_state']}  ·  Độ sáng {int(scr['brightness'])}%  ·  Âm lượng {int(scr['volume'])}%"
                         if is_online
-                        else "Hãy nhấn 'Bật nguồn' để kích hoạt lại màn hình LED",
-                        color=ft.Colors.BLUE_100 if is_online else ft.Colors.GREY_400,
-                        size=12,
+                        else "Nhấn 'Bật nguồn' để kết nối lại với bộ điều khiển màn hình.",
+                        color=theme.text_secondary(),
+                        size=theme.TEXT_12,
                     ),
                 ],
             ),
@@ -100,13 +131,26 @@ def build_view(page: ft.Page) -> ft.Column:
         page.update()
 
     async def simulate_power_command(action_type: str):
-        """Mô phỏng độ trễ 2 giây khi Bật nguồn, Tắt nguồn hoặc Khởi động lại thiết bị."""
+        """Khóa các nút nguồn và đổi chữ hiển thị trạng thái xử lý trong 2 giây."""
+        if not permissions.can(data.get_current_role(), "control", "power"):
+            show_snack(page, "Bạn không có quyền thực hiện thao tác này", is_error=True)
+            return
+
         scr = get_current_screen()
         if not scr or state["is_busy"]:
             return
 
         state["is_busy"] = True
-        busy_indicator.visible = True
+        power_on_btn.disabled = True
+        power_off_btn.disabled = True
+        restart_btn.disabled = True
+
+        if action_type == "power_on":
+            power_on_btn.content = "Đang bật nguồn..."
+        elif action_type == "power_off":
+            power_off_btn.content = "Đang tắt nguồn..."
+        else:
+            restart_btn.content = "Đang khởi động lại..."
         page.update()
 
         await asyncio.sleep(2.0)
@@ -114,53 +158,70 @@ def build_view(page: ft.Page) -> ft.Column:
         if action_type == "power_on":
             scr["status"] = "Online"
             scr["playing_state"] = "Đang phát"
-            msg = f"Đã bật nguồn \"{scr['name']}\" (Trạng thái: Online)"
+            msg = f"Đã bật nguồn {scr['code']}"
         elif action_type == "power_off":
             scr["status"] = "Offline"
             scr["playing_state"] = "Đã dừng"
-            msg = f"Đã tắt nguồn \"{scr['name']}\" (Trạng thái: Offline)"
+            msg = f"Đã tắt nguồn {scr['code']}"
         else:
             scr["status"] = "Online"
             scr["playing_state"] = "Đang phát"
             scr["temperature"] = 41
-            msg = f"Đã khởi động lại \"{scr['name']}\" thành công!"
+            msg = f"Đã khởi động lại {scr['code']}"
 
+        allow_power_now = permissions.can(data.get_current_role(), "control", "power")
+        power_on_btn.content = "Bật nguồn"
+        power_off_btn.content = "Tắt nguồn"
+        restart_btn.content = "Khởi động lại"
+        power_on_btn.disabled = not allow_power_now
+        power_off_btn.disabled = not allow_power_now
+        restart_btn.disabled = not allow_power_now
         state["is_busy"] = False
-        busy_indicator.visible = False
-        data.log_activity(f"Điều khiển từ xa: {msg}")
+
+        data.log_activity(f"Lệnh điều khiển: {msg} ({scr['name']}).")
         update_preview_and_controls()
         show_snack(page, msg)
 
     def trigger_power(action_type: str):
+        if not permissions.can(data.get_current_role(), "control", "power"):
+            show_snack(page, "Bạn không có quyền thực hiện thao tác này", is_error=True)
+            return
         page.run_task(simulate_power_command, action_type)
 
     def handle_playback_state(new_state: str):
-        """Tạm dừng hoặc Tiếp tục phát nội dung."""
+        if not permissions.can(data.get_current_role(), "control", "playback"):
+            show_snack(page, "Bạn không có quyền thực hiện thao tác này", is_error=True)
+            return
+
         scr = get_current_screen()
         if not scr:
             return
         if scr["status"] != "Online":
-            show_snack(page, "Thiết bị đang Offline! Vui lòng bật nguồn trước.", is_error=True)
+            show_snack(page, "Thiết bị đang Offline, không thể đổi trạng thái phát.", is_error=True)
             return
         scr["playing_state"] = new_state
-        msg = f"Đã chuyển \"{scr['name']}\" sang trạng thái: {new_state}"
-        data.log_activity(msg)
+        msg = f"{scr['code']}: {new_state}"
+        data.log_activity(f"Chuyển trạng thái phát {scr['code']} sang '{new_state}'.")
         update_preview_and_controls()
         show_snack(page, msg)
 
     def handle_apply_content(e):
-        """Đổi nội dung đang phát trên màn hình được chọn."""
+        if not permissions.can(data.get_current_role(), "control", "change_content"):
+            show_snack(page, "Bạn không có quyền thực hiện thao tác này", is_error=True)
+            return
+
         scr = get_current_screen()
         if not scr or not content_selector_dd.value:
             return
         scr["current_content_id"] = content_selector_dd.value
         cname = data.get_content_name(scr["current_content_id"])
-        msg = f"Đã chuyển nội dung phát của \"{scr['name']}\" sang \"{cname}\""
-        data.log_activity(msg)
+        data.log_activity(f"Đổi nội dung phát trên {scr['code']} sang '{cname}'.")
         update_preview_and_controls()
-        show_snack(page, msg)
+        show_snack(page, f"Đã phát '{cname}' trên {scr['code']}")
 
     def handle_brightness_change(e):
+        if not permissions.can(data.get_current_role(), "control", "brightness"):
+            return
         scr = get_current_screen()
         if not scr:
             return
@@ -170,15 +231,19 @@ def build_view(page: ft.Page) -> ft.Column:
         update_preview_and_controls()
 
     def handle_brightness_end(e):
+        if not permissions.can(data.get_current_role(), "control", "brightness"):
+            show_snack(page, "Bạn không có quyền thực hiện thao tác này", is_error=True)
+            return
         scr = get_current_screen()
         if not scr:
             return
         val = int(round(e.control.value or 0))
-        msg = f"Đã chỉnh độ sáng \"{scr['name']}\" thành {val}%"
-        data.log_activity(msg)
-        show_snack(page, msg)
+        data.log_activity(f"Điều chỉnh độ sáng {scr['code']} thành {val}%.")
+        show_snack(page, f"Độ sáng {scr['code']}: {val}%")
 
     def handle_volume_change(e):
+        if not permissions.can(data.get_current_role(), "control", "volume"):
+            return
         scr = get_current_screen()
         if not scr:
             return
@@ -188,25 +253,27 @@ def build_view(page: ft.Page) -> ft.Column:
         update_preview_and_controls()
 
     def handle_volume_end(e):
+        if not permissions.can(data.get_current_role(), "control", "volume"):
+            show_snack(page, "Bạn không có quyền thực hiện thao tác này", is_error=True)
+            return
         scr = get_current_screen()
         if not scr:
             return
         val = int(round(e.control.value or 0))
-        msg = f"Đã chỉnh âm lượng \"{scr['name']}\" thành {val}%"
-        data.log_activity(msg)
-        show_snack(page, msg)
+        data.log_activity(f"Điều chỉnh âm lượng {scr['code']} thành {val}%.")
+        show_snack(page, f"Âm lượng {scr['code']}: {val}%")
 
     screen_selector_dd = make_dropdown(
-        label="Chọn màn hình LED cần điều khiển",
-        options=[(s["id"], f"{s['name']} ({s['code']} - {s['status']})") for s in data.SCREENS_DATA],
+        label="",
+        options=[(s["id"], f"{s['code']} - {s['name']} ({s['status']})") for s in data.SCREENS_DATA],
         value=selected_id,
         on_change=lambda e: (state.update({"screen_id": e.control.value}), update_preview_and_controls()),
-        expand=True,
+        width=420,
     )
 
     content_selector_dd = make_dropdown(
-        label="Chọn nội dung phát sóng tức thì",
-        options=[(c["id"], f"{c['name']} ({c['type']} - {c['format']})") for c in data.CONTENTS_DATA],
+        label="",
+        options=[(c["id"], f"{c['name']} ({c['format']})") for c in data.CONTENTS_DATA],
         value=data.SCREENS_DATA[0]["current_content_id"] if data.SCREENS_DATA else None,
         expand=True,
     )
@@ -216,7 +283,8 @@ def build_view(page: ft.Page) -> ft.Column:
         max=100,
         divisions=20,
         value=80,
-        active_color=PRIMARY_COLOR,
+        disabled=not can_brightness,
+        active_color=theme.accent_color(),
         on_change=handle_brightness_change,
         on_change_end=handle_brightness_end,
         expand=True,
@@ -227,7 +295,8 @@ def build_view(page: ft.Page) -> ft.Column:
         max=100,
         divisions=20,
         value=50,
-        active_color=PRIMARY_COLOR,
+        disabled=not can_volume,
+        active_color=theme.accent_color(),
         on_change=handle_volume_change,
         on_change_end=handle_volume_end,
         expand=True,
@@ -238,156 +307,106 @@ def build_view(page: ft.Page) -> ft.Column:
     return ft.Column(
         expand=True,
         scroll=ft.ScrollMode.AUTO,
-        spacing=16,
+        spacing=theme.SPACE_16,
         controls=[
             create_page_header(
-                title="Điều khiển màn hình LED",
-                subtitle="Điều khiển nguồn từ xa, tạm dừng/tiếp tục trình chiếu, thay đổi nội dung tức thì và tinh chỉnh độ sáng/âm lượng.",
+                title="Điều khiển màn hình",
+                subtitle="Gửi lệnh điều khiển nguồn, chuyển nội dung phát tức thời và chỉnh thông số hiển thị.",
             ),
-            ft.Card(
-                elevation=2,
-                content=ft.Container(
-                    padding=18,
-                    content=ft.Column(
-                        spacing=12,
-                        controls=[
-                            ft.Row(
-                                spacing=16,
-                                wrap=True,
-                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                controls=[screen_selector_dd, status_badges_row],
-                            ),
-                            busy_indicator,
-                        ],
-                    ),
+            make_surface_box(
+                padding=theme.SPACE_16,
+                content=ft.Row(
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    wrap=True,
+                    controls=[
+                        make_form_field("Thiết bị đang chọn", screen_selector_dd),
+                        status_badges_row,
+                    ],
                 ),
             ),
             ft.ResponsiveRow(
-                spacing=16,
-                run_spacing=16,
+                spacing=theme.SPACE_16,
+                run_spacing=theme.SPACE_16,
                 controls=[
-                    # Cột trái: Các nút điều khiển nguồn, phát sóng, độ sáng, âm lượng
-                    ft.Card(
+                    make_surface_box(
                         col={"sm": 12, "lg": 6},
-                        elevation=2,
-                        content=ft.Container(
-                            padding=20,
-                            content=ft.Column(
-                                spacing=16,
-                                controls=[
-                                    ft.Text("1. Điều khiển nguồn & Trạng thái phát", size=16, weight=ft.FontWeight.BOLD),
-                                    ft.Row(
-                                        spacing=10,
-                                        wrap=True,
-                                        controls=[
-                                            ft.FilledButton(
-                                                "Bật nguồn",
-                                                icon=ft.Icons.POWER_SETTINGS_NEW,
-                                                bgcolor=ft.Colors.GREEN_700,
-                                                color=ft.Colors.WHITE,
-                                                on_click=lambda e: trigger_power("power_on"),
-                                            ),
-                                            ft.FilledButton(
-                                                "Tắt nguồn",
-                                                icon=ft.Icons.POWER_OFF,
-                                                bgcolor=ft.Colors.RED_600,
-                                                color=ft.Colors.WHITE,
-                                                on_click=lambda e: trigger_power("power_off"),
-                                            ),
-                                            ft.OutlinedButton(
-                                                "Khởi động lại (2s)",
-                                                icon=ft.Icons.RESTART_ALT,
-                                                on_click=lambda e: trigger_power("restart"),
-                                            ),
-                                        ],
-                                    ),
-                                    ft.Row(
-                                        spacing=10,
-                                        wrap=True,
-                                        controls=[
-                                            ft.FilledButton(
-                                                "Tiếp tục phát",
-                                                icon=ft.Icons.PLAY_ARROW,
-                                                bgcolor=PRIMARY_COLOR,
-                                                color=ft.Colors.WHITE,
-                                                on_click=lambda e: handle_playback_state("Đang phát"),
-                                            ),
-                                            ft.OutlinedButton(
-                                                "Tạm dừng phát",
-                                                icon=ft.Icons.PAUSE,
-                                                on_click=lambda e: handle_playback_state("Tạm dừng"),
-                                            ),
-                                        ],
-                                    ),
-                                    ft.Divider(height=4),
-                                    ft.Text("2. Chuyển đổi nội dung đang hiển thị", size=16, weight=ft.FontWeight.BOLD),
-                                    ft.Row(
-                                        spacing=10,
-                                        controls=[
-                                            content_selector_dd,
-                                            ft.FilledButton(
-                                                "Áp dụng ngay",
-                                                icon=ft.Icons.SEND_TO_MOBILE,
-                                                bgcolor=PRIMARY_COLOR,
-                                                color=ft.Colors.WHITE,
-                                                on_click=handle_apply_content,
-                                            ),
-                                        ],
-                                    ),
-                                    ft.Divider(height=4),
-                                    ft.Text("3. Độ sáng & Âm lượng thiết bị", size=16, weight=ft.FontWeight.BOLD),
-                                    ft.Row(
-                                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                        controls=[
-                                            ft.Icon(ft.Icons.BRIGHTNESS_6, color=PRIMARY_COLOR),
-                                            ft.Text("Độ sáng:", width=80),
-                                            brightness_slider,
-                                            brightness_label,
-                                        ],
-                                    ),
-                                    ft.Row(
-                                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                        controls=[
-                                            ft.Icon(ft.Icons.VOLUME_UP, color=PRIMARY_COLOR),
-                                            ft.Text("Âm lượng:", width=80),
-                                            volume_slider,
-                                            volume_label,
-                                        ],
-                                    ),
-                                ],
-                            ),
+                        padding=theme.SPACE_24,
+                        content=ft.Column(
+                            spacing=theme.SPACE_16,
+                            controls=[
+                                ft.Text("Nguồn & Trạng thái trình chiếu", size=theme.TEXT_16, weight=theme.WEIGHT_SEMI),
+                                ft.Row(
+                                    spacing=theme.SPACE_8,
+                                    wrap=True,
+                                    controls=[power_on_btn, power_off_btn, restart_btn],
+                                ),
+                                ft.Row(
+                                    spacing=theme.SPACE_8,
+                                    wrap=True,
+                                    controls=[
+                                        make_secondary_button(
+                                            "Tiếp tục phát",
+                                            icon_name=ft.Icons.PLAY_ARROW_OUTLINED,
+                                            disabled=not can_playback,
+                                            on_click=lambda e: handle_playback_state("Đang phát"),
+                                        ),
+                                        make_secondary_button(
+                                            "Tạm dừng",
+                                            icon_name=ft.Icons.PAUSE_OUTLINED,
+                                            disabled=not can_playback,
+                                            on_click=lambda e: handle_playback_state("Tạm dừng"),
+                                        ),
+                                    ],
+                                ),
+                                ft.Divider(height=theme.SPACE_8, color=theme.border_color()),
+                                ft.Text("Chuyển đổi nội dung phát", size=theme.TEXT_16, weight=theme.WEIGHT_SEMI),
+                                ft.Row(
+                                    spacing=theme.SPACE_8,
+                                    controls=[
+                                        content_selector_dd,
+                                        make_primary_button(
+                                            "Áp dụng",
+                                            disabled=not can_change_content,
+                                            on_click=handle_apply_content,
+                                        ),
+                                    ],
+                                ),
+                                ft.Divider(height=theme.SPACE_8, color=theme.border_color()),
+                                ft.Text("Thông số độ sáng & âm lượng", size=theme.TEXT_16, weight=theme.WEIGHT_SEMI),
+                                ft.Row(
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                    controls=[
+                                        ft.Text("Độ sáng", size=theme.TEXT_14, width=80, color=theme.text_secondary()),
+                                        brightness_slider,
+                                        brightness_label,
+                                    ],
+                                ),
+                                ft.Row(
+                                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                    controls=[
+                                        ft.Text("Âm lượng", size=theme.TEXT_14, width=80, color=theme.text_secondary()),
+                                        volume_slider,
+                                        volume_label,
+                                    ],
+                                ),
+                            ],
                         ),
                     ),
-                    # Cột phải: Khung xem trước trực tiếp
-                    ft.Card(
+                    make_surface_box(
                         col={"sm": 12, "lg": 6},
-                        elevation=2,
-                        content=ft.Container(
-                            padding=20,
-                            content=ft.Column(
-                                spacing=12,
-                                controls=[
-                                    ft.Row(
-                                        spacing=8,
-                                        controls=[
-                                            ft.Icon(ft.Icons.LIVE_TV, color=PRIMARY_COLOR),
-                                            ft.Text("Khung xem trước nội dung đang phát (Live Preview)", size=16, weight=ft.FontWeight.BOLD),
-                                        ],
-                                    ),
-                                    ft.Divider(height=4),
-                                    preview_box,
-                                    ft.Container(
-                                        padding=pad_sym(horizontal=12, vertical=8),
-                                        border_radius=8,
-                                        bgcolor=PRIMARY_LIGHT,
-                                        content=ft.Text(
-                                            "Ghi chú: Mọi thao tác điều khiển tại đây đều tự động cập nhật trạng thái thiết bị và lưu vào Nhật ký hoạt động ở trang Tổng quan.",
-                                            size=12,
-                                            color=PRIMARY_COLOR,
-                                        ),
-                                    ),
-                                ],
-                            ),
+                        padding=theme.SPACE_24,
+                        content=ft.Column(
+                            spacing=theme.SPACE_16,
+                            controls=[
+                                ft.Text("Khung giám sát nội dung đang phát", size=theme.TEXT_16, weight=theme.WEIGHT_SEMI),
+                                preview_box,
+                                ft.Text(
+                                    "Lệnh điều khiển nguồn có độ trễ phản hồi khoảng 2 giây từ tủ điều khiển.",
+                                    size=theme.TEXT_12,
+                                    color=theme.text_secondary(),
+                                ),
+                            ],
                         ),
                     ),
                 ],

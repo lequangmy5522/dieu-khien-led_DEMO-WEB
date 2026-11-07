@@ -1,10 +1,13 @@
 import flet as ft
 import data
+import theme
 from components import (
-    PRIMARY_COLOR,
-    PRIMARY_LIGHT,
     ALIGN_CENTER,
     border_all,
+    make_form_field,
+    make_primary_button,
+    make_surface_box,
+    make_text_field,
     pad_sym,
     set_field_error,
     show_snack,
@@ -12,30 +15,26 @@ from components import (
 
 
 def build_view(page: ft.Page, on_login_success) -> ft.Container:
-    """Xây dựng màn hình Đăng nhập Demo với thông tin tài khoản hướng dẫn rõ ràng."""
-    username_field = ft.TextField(
-        label="Tên đăng nhập",
-        hint_text="Nhập tên tài khoản (ví dụ: admin)",
+    """Màn hình đăng nhập gọn, phẳng theo chuẩn phần mềm quản trị nội bộ."""
+    username_field = make_text_field(
         value="admin",
-        prefix_icon=ft.Icons.PERSON_OUTLINE,
-        border_radius=8,
-        autofocus=True,
+        hint_text="Nhập tên tài khoản",
     )
-
-    password_field = ft.TextField(
-        label="Mật khẩu",
-        hint_text="Nhập mật khẩu demo",
+    password_field = make_text_field(
         value="123456",
+        hint_text="Nhập mật khẩu",
         password=True,
         can_reveal_password=True,
-        prefix_icon=ft.Icons.LOCK_OUTLINE,
-        border_radius=8,
     )
 
-    error_banner = ft.Text("", color=ft.Colors.RED_600, size=13, visible=False)
+    error_banner = ft.Text(
+        "",
+        color=theme.STATUS_DANGER,
+        size=theme.TEXT_12,
+        visible=False,
+    )
 
     def handle_login(e=None):
-        """Kiểm tra dữ liệu bỏ trống và xác thực với danh sách USERS_DATA."""
         set_field_error(username_field, None)
         set_field_error(password_field, None)
         error_banner.visible = False
@@ -55,7 +54,6 @@ def build_view(page: ft.Page, on_login_success) -> ft.Container:
             page.update()
             return
 
-        # Tìm tài khoản trong mock data
         matched_user = None
         for u in data.USERS_DATA:
             if u["username"].lower() == uname.lower() and u["password"] == pwd:
@@ -63,26 +61,23 @@ def build_view(page: ft.Page, on_login_success) -> ft.Container:
                 break
 
         if not matched_user:
-            error_banner.value = "Sai tên đăng nhập hoặc mật khẩu demo!"
+            error_banner.value = "Tên đăng nhập hoặc mật khẩu không đúng."
             error_banner.visible = True
             page.update()
             return
 
         if not matched_user["active"]:
-            error_banner.value = "Tài khoản này hiện đang bị khóa. Vui lòng dùng tài khoản khác!"
+            error_banner.value = "Tài khoản này đang bị tạm khóa. Vui lòng liên hệ Quản trị viên."
             error_banner.visible = True
             page.update()
             return
 
-        # Cập nhật người dùng hiện tại và chuyển vào trang Tổng quan
-        data.CURRENT_USER.clear()
-        data.CURRENT_USER.update(matched_user)
-        data.log_activity(f"{matched_user['full_name']} ({matched_user['username']}) đã đăng nhập hệ thống.")
+        data.set_current_user(matched_user)
+        data.log_activity(f"Đăng nhập hệ thống bằng tài khoản '{matched_user['username']}'.")
         on_login_success()
-        show_snack(page, f"Xin chào {matched_user['full_name']}! Đăng nhập thành công.")
+        show_snack(page, f"Đã đăng nhập: {matched_user['full_name']} ({matched_user['role']})")
 
     def fill_demo_account(uname: str, pwd: str):
-        """Điền nhanh tài khoản demo khi người dùng nhấn chọn."""
         username_field.value = uname
         password_field.value = pwd
         set_field_error(username_field, None)
@@ -90,100 +85,109 @@ def build_view(page: ft.Page, on_login_success) -> ft.Container:
         error_banner.visible = False
         page.update()
 
-    password_field.on_submit = handle_login
     username_field.on_submit = handle_login
+    password_field.on_submit = handle_login
 
-    login_card = ft.Card(
-        elevation=6,
+    login_box = make_surface_box(
+        padding=theme.SPACE_32,
         content=ft.Container(
-            width=440,
-            padding=32,
-            border_radius=16,
+            width=360,
             content=ft.Column(
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=16,
+                spacing=theme.SPACE_16,
                 tight=True,
                 controls=[
-                    ft.Container(
-                        width=68,
-                        height=68,
-                        border_radius=18,
-                        bgcolor=PRIMARY_COLOR,
-                        alignment=ALIGN_CENTER,
-                        content=ft.Icon(ft.Icons.TV_ROUNDED, color=ft.Colors.WHITE, size=36),
-                    ),
-                    ft.Column(
-                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                        spacing=4,
+                    ft.Row(
+                        spacing=theme.SPACE_8,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         controls=[
-                            ft.Text(
-                                "ĐIỀU KHIỂN MÀN HÌNH LED",
-                                size=20,
-                                weight=ft.FontWeight.BOLD,
-                                color=PRIMARY_COLOR,
+                            ft.Container(
+                                width=theme.SPACE_24,
+                                height=theme.SPACE_24,
+                                border_radius=theme.RADIUS_INPUT,
+                                bgcolor=theme.accent_color(),
+                                alignment=ALIGN_CENTER,
+                                content=ft.Text(
+                                    "VL",
+                                    size=theme.TEXT_12,
+                                    weight=theme.WEIGHT_SEMI,
+                                    color=theme.WHITE,
+                                ),
                             ),
                             ft.Text(
-                                "Hệ thống quản trị & phát sóng tập trung (Bản Demo)",
-                                size=13,
-                                color=ft.Colors.GREY_600,
+                                "VietLED CMS",
+                                size=theme.TEXT_16,
+                                weight=theme.WEIGHT_SEMI,
+                                color=theme.text_primary(),
                             ),
                         ],
                     ),
-                    ft.Divider(height=8),
-                    username_field,
-                    password_field,
+                    ft.Column(
+                        spacing=theme.SPACE_4,
+                        controls=[
+                            ft.Text(
+                                "Đăng nhập quản trị",
+                                size=theme.TEXT_22,
+                                weight=theme.WEIGHT_SEMI,
+                                color=theme.text_primary(),
+                            ),
+                            ft.Text(
+                                "Hệ thống điều khiển màn hình LED nội bộ",
+                                size=theme.TEXT_12,
+                                color=theme.text_secondary(),
+                            ),
+                        ],
+                    ),
+                    make_form_field("Tên đăng nhập", username_field),
+                    make_form_field("Mật khẩu", password_field),
                     error_banner,
-                    ft.FilledButton(
-                        "Đăng nhập hệ thống",
-                        icon=ft.Icons.LOGIN,
-                        bgcolor=PRIMARY_COLOR,
-                        color=ft.Colors.WHITE,
-                        width=380,
-                        height=44,
+                    make_primary_button(
+                        "Đăng nhập",
                         on_click=handle_login,
+                        width=360,
                     ),
                     ft.Container(
-                        width=380,
-                        padding=12,
-                        border_radius=10,
-                        bgcolor=PRIMARY_LIGHT,
-                        border=border_all(1, ft.Colors.BLUE_200),
+                        padding=theme.SPACE_12,
+                        border_radius=theme.RADIUS_INPUT,
+                        bgcolor=theme.surface_subtle_color(),
+                        border=border_all(theme.BORDER_WIDTH, theme.border_color()),
                         content=ft.Column(
-                            spacing=6,
+                            spacing=theme.SPACE_8,
                             controls=[
-                                ft.Row(
-                                    controls=[
-                                        ft.Icon(ft.Icons.INFO_OUTLINE, color=PRIMARY_COLOR, size=18),
-                                        ft.Text(
-                                            "Tài khoản Demo cố định (Nhấn để điền nhanh):",
-                                            weight=ft.FontWeight.BOLD,
-                                            size=12,
-                                            color=PRIMARY_COLOR,
-                                        ),
-                                    ],
-                                    spacing=6,
+                                ft.Text(
+                                    "Tài khoản demo theo 3 vai trò (Mật khẩu: 123456)",
+                                    size=theme.TEXT_12,
+                                    weight=theme.WEIGHT_SEMI,
+                                    color=theme.text_primary(),
                                 ),
                                 ft.Text(
-                                    "• Quản trị viên: admin / 123456\n"
-                                    "• Biên tập viên: bientap01 / 123456\n"
-                                    "• Người xem: nguoixem01 / 123456",
-                                    size=12,
-                                    color=ft.Colors.BLUE_900,
+                                    "Quản trị viên: admin  |  Biên tập viên: bientap  |  Người xem: xem",
+                                    size=theme.TEXT_12,
+                                    color=theme.text_secondary(),
+                                ),
+                                ft.Text(
+                                    "Tài khoản đang bị khóa để thử nghiệm: khanh.vq",
+                                    size=theme.TEXT_12,
+                                    color=theme.text_secondary(),
                                 ),
                                 ft.Row(
-                                    spacing=8,
+                                    spacing=theme.SPACE_4,
+                                    wrap=True,
                                     controls=[
                                         ft.TextButton(
-                                            "Điền Admin",
+                                            "Điền admin",
                                             on_click=lambda e: fill_demo_account("admin", "123456"),
                                         ),
                                         ft.TextButton(
-                                            "Điền Biên tập",
-                                            on_click=lambda e: fill_demo_account("bientap01", "123456"),
+                                            "Điền bientap",
+                                            on_click=lambda e: fill_demo_account("bientap", "123456"),
                                         ),
                                         ft.TextButton(
-                                            "Điền Người xem",
-                                            on_click=lambda e: fill_demo_account("nguoixem01", "123456"),
+                                            "Điền xem",
+                                            on_click=lambda e: fill_demo_account("xem", "123456"),
+                                        ),
+                                        ft.TextButton(
+                                            "TK khóa",
+                                            on_click=lambda e: fill_demo_account("khanh.vq", "123456"),
                                         ),
                                     ],
                                 ),
@@ -197,7 +201,8 @@ def build_view(page: ft.Page, on_login_success) -> ft.Container:
 
     return ft.Container(
         expand=True,
+        bgcolor=theme.bg_color(),
         alignment=ALIGN_CENTER,
-        padding=pad_sym(horizontal=16, vertical=24),
-        content=login_card,
+        padding=pad_sym(horizontal=theme.SPACE_16, vertical=theme.SPACE_24),
+        content=login_box,
     )

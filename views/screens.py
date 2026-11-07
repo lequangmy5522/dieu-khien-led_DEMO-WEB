@@ -1,13 +1,24 @@
 import flet as ft
 import data
+import permissions
+import theme
 from components import (
-    PRIMARY_COLOR,
+    border_only,
     close_dialog,
+    create_action_icon,
+    create_empty_state,
     create_page_header,
+    create_pagination_bar,
     create_search_field,
     create_status_badge,
+    create_styled_table,
     make_dropdown,
+    make_form_field,
+    make_primary_button,
+    make_surface_box,
+    make_text_field,
     open_dialog,
+    pad_sym,
     set_field_error,
     show_confirm_delete_dialog,
     show_snack,
@@ -15,17 +26,16 @@ from components import (
 
 
 def build_view(page: ft.Page) -> ft.Column:
-    """Xây dựng giao diện Quản lý màn hình LED: tìm kiếm, lọc, thêm, sửa, xóa, xem chi tiết."""
+    """Trang Quản lý màn hình LED: thanh công cụ tìm kiếm + lọc, bảng dữ liệu và phân trang."""
     filter_state = {
         "keyword": "",
         "status": "Tất cả",
+        "page": 1,
     }
 
-    table_container = ft.Column(spacing=10)
-    summary_text = ft.Text("", size=13, color=ft.Colors.GREY_600)
+    table_container = ft.Column(spacing=0)
 
     def get_filtered_screens() -> list:
-        """Lọc danh sách màn hình theo từ khóa (tên/mã thiết bị) và trạng thái."""
         kw = filter_state["keyword"].strip().lower()
         st = filter_state["status"]
         results = []
@@ -42,68 +52,65 @@ def build_view(page: ft.Page) -> ft.Column:
         return results
 
     def open_detail_dialog(screen: dict):
-        """Hiển thị hộp thoại xem chi tiết đầy đủ thông tin một màn hình LED."""
+        """Hộp thoại thông tin chi tiết thiết bị."""
+        if not permissions.can(data.get_current_role(), "screens", "detail"):
+            show_snack(page, "Bạn không có quyền thực hiện thao tác này", is_error=True)
+            return
+
         content_name = data.get_content_name(screen["current_content_id"])
         detail_rows = [
-            ("Mã nội bộ:", screen["id"]),
-            ("Mã thiết bị:", screen["code"]),
-            ("Tên màn hình:", screen["name"]),
-            ("Vị trí lắp đặt:", screen["location"]),
-            ("Kích thước vật lý:", screen["size"]),
-            ("Độ phân giải:", screen["resolution"]),
-            ("Trạng thái kết nối:", screen["status"]),
-            ("Trạng thái phát:", screen["playing_state"]),
-            ("Nội dung đang phát:", content_name),
-            ("Độ sáng / Âm lượng:", f"{screen['brightness']}% / {screen['volume']}%"),
-            ("Nhiệt độ thiết bị:", f"{screen['temperature']}°C"),
-            ("Thời gian hoạt động:", screen["uptime"]),
-            ("Kết nối gần nhất:", screen["last_connected"]),
+            ("Mã thiết bị", f"{screen['code']} (ID: {screen['id']})"),
+            ("Tên màn hình", screen["name"]),
+            ("Vị trí lắp đặt", screen["location"]),
+            ("Cấu hình phần cứng", screen["size"]),
+            ("Độ phân giải", screen["resolution"]),
+            ("Nội dung đang gán", content_name),
+            ("Độ sáng / Âm lượng", f"{screen['brightness']}% / {screen['volume']}%"),
+            ("Nhiệt độ đo được", f"{screen['temperature']}°C"),
+            ("Thời gian chạy liên tục", screen["uptime"]),
+            ("Đồng bộ gần nhất", screen["last_connected"]),
         ]
 
         info_controls = []
-        for label, val in detail_rows:
+        for idx, (label, val) in enumerate(detail_rows):
             info_controls.append(
-                ft.Row(
-                    controls=[
-                        ft.Text(label, weight=ft.FontWeight.W_600, width=165, size=13),
-                        ft.Text(str(val), expand=True, size=13),
-                    ],
-                    vertical_alignment=ft.CrossAxisAlignment.START,
+                ft.Container(
+                    padding=pad_sym(vertical=theme.SPACE_8),
+                    border=border_only(bottom=ft.BorderSide(theme.BORDER_WIDTH, theme.border_color()))
+                    if idx < len(detail_rows) - 1
+                    else None,
+                    content=ft.Row(
+                        controls=[
+                            ft.Text(label, size=theme.TEXT_12, color=theme.text_secondary(), width=148),
+                            ft.Text(str(val), size=theme.TEXT_14, color=theme.text_primary(), expand=True),
+                        ],
+                    ),
                 )
             )
 
         dialog = ft.AlertDialog(
             modal=True,
-            title=ft.Row(
-                controls=[
-                    ft.Icon(ft.Icons.TV_ROUNDED, color=PRIMARY_COLOR),
-                    ft.Text("Chi tiết màn hình LED", weight=ft.FontWeight.BOLD, size=18),
-                ],
-                spacing=8,
-            ),
+            title=ft.Text("Thông số thiết bị", size=theme.TEXT_16, weight=theme.WEIGHT_SEMI),
             content=ft.Container(
                 width=460,
                 content=ft.Column(
                     tight=True,
-                    spacing=8,
+                    spacing=theme.SPACE_8,
                     controls=[
                         ft.Row(
+                            spacing=theme.SPACE_16,
                             controls=[
                                 create_status_badge(screen["status"]),
                                 create_status_badge(screen["playing_state"]),
                             ],
-                            spacing=8,
                         ),
-                        ft.Divider(height=8),
-                        *info_controls,
+                        ft.Column(spacing=0, controls=info_controls),
                     ],
                 ),
             ),
             actions=[
-                ft.FilledButton(
+                ft.TextButton(
                     "Đóng",
-                    bgcolor=PRIMARY_COLOR,
-                    color=ft.Colors.WHITE,
                     on_click=lambda e: close_dialog(page, dialog),
                 )
             ],
@@ -111,44 +118,41 @@ def build_view(page: ft.Page) -> ft.Column:
         open_dialog(page, dialog)
 
     def open_screen_form_dialog(screen_to_edit: dict | None = None):
-        """Mở hộp thoại Thêm mới hoặc Chỉnh sửa màn hình LED có kiểm tra dữ liệu trống."""
+        """Form thêm mới / chỉnh sửa màn hình với kiểm tra quyền ở tầng xử lý."""
         is_edit = screen_to_edit is not None
+        required_action = "edit" if is_edit else "add"
+        if not permissions.can(data.get_current_role(), "screens", required_action):
+            show_snack(page, "Bạn không có quyền thực hiện thao tác này", is_error=True)
+            return
 
-        name_field = ft.TextField(
-            label="Tên màn hình LED *",
+        name_field = make_text_field(
             value=screen_to_edit["name"] if is_edit else "",
-            border_radius=8,
+            hint_text="VD: LED mặt tiền Chi nhánh Biên Hòa",
         )
-        code_field = ft.TextField(
-            label="Mã thiết bị *",
+        code_field = make_text_field(
             value=screen_to_edit["code"] if is_edit else "",
-            hint_text="Ví dụ: DEV-HN-011",
-            border_radius=8,
+            hint_text="VD: LED-BH-011",
         )
-        location_field = ft.TextField(
-            label="Vị trí lắp đặt *",
+        location_field = make_text_field(
             value=screen_to_edit["location"] if is_edit else "",
-            border_radius=8,
+            hint_text="VD: Số 128 Phạm Văn Thuận, TP. Biên Hòa",
         )
-        size_field = ft.TextField(
-            label="Kích thước & Loại module *",
+        size_field = make_text_field(
             value=screen_to_edit["size"] if is_edit else "",
-            hint_text="Ví dụ: 5.0m x 3.0m (P2.5 Indoor)",
-            border_radius=8,
+            hint_text="VD: P4 Outdoor, 6m x 3m",
         )
-        resolution_field = ft.TextField(
-            label="Độ phân giải *",
+        resolution_field = make_text_field(
             value=screen_to_edit["resolution"] if is_edit else "1920 x 1080 px",
-            border_radius=8,
+            hint_text="VD: 1920 x 1080 px",
         )
         status_dd = make_dropdown(
-            label="Trạng thái *",
+            label="",
             options=["Online", "Offline", "Sự cố"],
             value=screen_to_edit["status"] if is_edit else "Online",
         )
-        content_options = [(c["id"], f"{c['name']} ({c['type']})") for c in data.CONTENTS_DATA]
+        content_options = [(c["id"], f"{c['name']} ({c['format']})") for c in data.CONTENTS_DATA]
         content_dd = make_dropdown(
-            label="Nội dung phát mặc định",
+            label="",
             options=content_options,
             value=screen_to_edit["current_content_id"]
             if is_edit
@@ -156,7 +160,11 @@ def build_view(page: ft.Page) -> ft.Column:
         )
 
         def handle_save(e):
-            # Xóa lỗi cũ
+            if not permissions.can(data.get_current_role(), "screens", required_action):
+                close_dialog(page, dialog)
+                show_snack(page, "Bạn không có quyền thực hiện thao tác này", is_error=True)
+                return
+
             for fld in [name_field, code_field, location_field, size_field, resolution_field]:
                 set_field_error(fld, None)
 
@@ -177,11 +185,10 @@ def build_view(page: ft.Page) -> ft.Column:
                 set_field_error(resolution_field, "Vui lòng nhập độ phân giải")
                 has_error = True
 
-            # Kiểm tra trùng mã thiết bị
             code_val = (code_field.value or "").strip().upper()
             for s in data.SCREENS_DATA:
                 if s["code"].upper() == code_val and (not is_edit or s["id"] != screen_to_edit["id"]):
-                    set_field_error(code_field, "Mã thiết bị này đã tồn tại")
+                    set_field_error(code_field, "Mã thiết bị đã tồn tại")
                     has_error = True
                     break
 
@@ -205,8 +212,8 @@ def build_view(page: ft.Page) -> ft.Column:
                 screen_to_edit["status"] = new_status
                 screen_to_edit["playing_state"] = playing_state
                 screen_to_edit["current_content_id"] = content_dd.value
-                data.log_activity(f"Đã cập nhật thông tin màn hình '{screen_to_edit['name']}' ({code_val}).")
-                msg = f"Đã cập nhật màn hình \"{screen_to_edit['name']}\"!"
+                data.log_activity(f"Cập nhật màn hình '{screen_to_edit['name']}' ({code_val}).")
+                msg = f"Đã lưu thay đổi cho {code_val}"
             else:
                 new_screen = {
                     "id": data.generate_next_id("LED", data.SCREENS_DATA),
@@ -220,13 +227,13 @@ def build_view(page: ft.Page) -> ft.Column:
                     "current_content_id": content_dd.value,
                     "brightness": 80,
                     "volume": 50,
-                    "temperature": 40 if new_status == "Online" else (65 if new_status == "Sự cố" else 32),
-                    "uptime": "00 ngày 01 giờ" if new_status != "Offline" else "00 ngày 00 giờ",
+                    "temperature": 41 if new_status == "Online" else (64 if new_status == "Sự cố" else 31),
+                    "uptime": "0 ngày 01 giờ" if new_status != "Offline" else "0 ngày 00 giờ",
                     "last_connected": "Vừa xong",
                 }
                 data.SCREENS_DATA.insert(0, new_screen)
-                data.log_activity(f"Đã thêm màn hình LED mới '{new_screen['name']}' ({code_val}).")
-                msg = f"Đã thêm màn hình \"{new_screen['name']}\" thành công!"
+                data.log_activity(f"Thêm mới màn hình '{new_screen['name']}' ({code_val}).")
+                msg = f"Đã thêm màn hình {code_val}"
 
             close_dialog(page, dialog)
             refresh_table()
@@ -235,89 +242,149 @@ def build_view(page: ft.Page) -> ft.Column:
         dialog = ft.AlertDialog(
             modal=True,
             title=ft.Text(
-                "Chỉnh sửa màn hình LED" if is_edit else "Thêm màn hình LED mới",
-                weight=ft.FontWeight.BOLD,
-                size=18,
+                "Cập nhật màn hình LED" if is_edit else "Thêm màn hình LED",
+                size=theme.TEXT_16,
+                weight=theme.WEIGHT_SEMI,
             ),
             content=ft.Container(
                 width=480,
                 content=ft.Column(
                     tight=True,
-                    spacing=12,
+                    spacing=theme.SPACE_12,
                     scroll=ft.ScrollMode.AUTO,
                     controls=[
-                        name_field,
-                        code_field,
-                        location_field,
-                        size_field,
-                        resolution_field,
-                        status_dd,
-                        content_dd,
+                        ft.Row(
+                            spacing=theme.SPACE_12,
+                            controls=[
+                                ft.Container(expand=2, content=make_form_field("Tên màn hình *", name_field)),
+                                ft.Container(expand=1, content=make_form_field("Mã thiết bị *", code_field)),
+                            ],
+                        ),
+                        make_form_field("Địa điểm lắp đặt *", location_field),
+                        ft.Row(
+                            spacing=theme.SPACE_12,
+                            controls=[
+                                ft.Container(expand=1, content=make_form_field("Loại module & Kích thước *", size_field)),
+                                ft.Container(expand=1, content=make_form_field("Độ phân giải *", resolution_field)),
+                            ],
+                        ),
+                        ft.Row(
+                            spacing=theme.SPACE_12,
+                            controls=[
+                                ft.Container(expand=1, content=make_form_field("Trạng thái", status_dd)),
+                                ft.Container(expand=2, content=make_form_field("Nội dung mặc định", content_dd)),
+                            ],
+                        ),
                     ],
                 ),
             ),
             actions=[
-                ft.OutlinedButton("Hủy", on_click=lambda e: close_dialog(page, dialog)),
-                ft.FilledButton(
-                    "Lưu thông tin",
-                    icon=ft.Icons.SAVE,
-                    bgcolor=PRIMARY_COLOR,
-                    color=ft.Colors.WHITE,
-                    on_click=handle_save,
-                ),
+                ft.TextButton("Hủy", on_click=lambda e: close_dialog(page, dialog)),
+                make_primary_button("Lưu thông tin", on_click=handle_save),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )
         open_dialog(page, dialog)
 
     def handle_delete_screen(screen: dict):
-        """Xác nhận và xóa màn hình khỏi danh sách."""
+        if not permissions.can(data.get_current_role(), "screens", "delete"):
+            show_snack(page, "Bạn không có quyền thực hiện thao tác này", is_error=True)
+            return
+
         def confirm_delete():
+            if not permissions.can(data.get_current_role(), "screens", "delete"):
+                show_snack(page, "Bạn không có quyền thực hiện thao tác này", is_error=True)
+                return
             data.SCREENS_DATA.remove(screen)
-            data.log_activity(f"Đã xóa màn hình LED '{screen['name']}' ({screen['code']}).")
+            data.log_activity(f"Xóa màn hình '{screen['name']}' ({screen['code']}).")
             refresh_table()
-            show_snack(page, f"Đã xóa màn hình \"{screen['name']}\"!")
+            show_snack(page, f"Đã xóa {screen['code']}")
 
         show_confirm_delete_dialog(page, f"{screen['name']} ({screen['code']})", confirm_delete)
 
+    def change_page(new_page: int):
+        filter_state["page"] = new_page
+        refresh_table()
+
     def refresh_table():
-        """Vẽ lại bảng danh sách màn hình LED theo bộ lọc hiện tại."""
+        role = data.get_current_role()
+        can_detail = permissions.can(role, "screens", "detail")
+        can_edit = permissions.can(role, "screens", "edit")
+        can_delete = permissions.can(role, "screens", "delete")
+
         filtered = get_filtered_screens()
-        summary_text.value = f"Hiển thị {len(filtered)} / {len(data.SCREENS_DATA)} màn hình LED"
+        page_size = int(data.SYSTEM_SETTINGS.get("rows_per_page", "10"))
+        total_pages = max(1, (len(filtered) + page_size - 1) // page_size)
+        if filter_state["page"] > total_pages:
+            filter_state["page"] = total_pages
+        cur_p = filter_state["page"]
+        paged_items = filtered[(cur_p - 1) * page_size : cur_p * page_size]
+
+        if not paged_items:
+            table_container.controls = [
+                create_empty_state("Không tìm thấy màn hình LED nào khớp với từ khóa hoặc trạng thái đã chọn.")
+            ]
+            page.update()
+            return
 
         rows = []
-        for scr in filtered:
+        for scr in paged_items:
+            row_actions = []
+            if can_detail:
+                row_actions.append(
+                    create_action_icon(
+                        ft.Icons.VISIBILITY_OUTLINED,
+                        "Xem chi tiết",
+                        lambda e, s=scr: open_detail_dialog(s),
+                    )
+                )
+            if can_edit:
+                row_actions.append(
+                    create_action_icon(
+                        ft.Icons.EDIT_OUTLINED,
+                        "Chỉnh sửa",
+                        lambda e, s=scr: open_screen_form_dialog(s),
+                    )
+                )
+            if can_delete:
+                row_actions.append(
+                    create_action_icon(
+                        ft.Icons.DELETE_OUTLINE,
+                        "Xóa thiết bị",
+                        lambda e, s=scr: handle_delete_screen(s),
+                        is_danger=True,
+                    )
+                )
+
             rows.append(
                 ft.DataRow(
                     cells=[
-                        ft.DataCell(ft.Text(scr["code"], weight=ft.FontWeight.BOLD, size=13)),
-                        ft.DataCell(ft.Text(scr["name"], weight=ft.FontWeight.W_500, size=13)),
-                        ft.DataCell(ft.Text(scr["location"], size=13)),
-                        ft.DataCell(ft.Text(scr["size"], size=12)),
+                        ft.DataCell(ft.Text(scr["code"], size=theme.TEXT_14, weight=theme.WEIGHT_SEMI)),
+                        ft.DataCell(
+                            ft.Text(
+                                scr["name"],
+                                size=theme.TEXT_14,
+                                max_lines=1,
+                                overflow=ft.TextOverflow.ELLIPSIS,
+                                tooltip=scr["name"],
+                            )
+                        ),
+                        ft.DataCell(
+                            ft.Text(
+                                scr["location"],
+                                size=theme.TEXT_14,
+                                color=theme.text_secondary(),
+                                max_lines=1,
+                                overflow=ft.TextOverflow.ELLIPSIS,
+                                tooltip=scr["location"],
+                            )
+                        ),
+                        ft.DataCell(ft.Text(scr["size"], size=theme.TEXT_14)),
                         ft.DataCell(create_status_badge(scr["status"])),
                         ft.DataCell(
                             ft.Row(
-                                spacing=4,
-                                controls=[
-                                    ft.IconButton(
-                                        icon=ft.Icons.VISIBILITY_OUTLINED,
-                                        icon_color=PRIMARY_COLOR,
-                                        tooltip="Xem chi tiết",
-                                        on_click=lambda e, s=scr: open_detail_dialog(s),
-                                    ),
-                                    ft.IconButton(
-                                        icon=ft.Icons.EDIT_OUTLINED,
-                                        icon_color=ft.Colors.AMBER_800,
-                                        tooltip="Chỉnh sửa",
-                                        on_click=lambda e, s=scr: open_screen_form_dialog(s),
-                                    ),
-                                    ft.IconButton(
-                                        icon=ft.Icons.DELETE_OUTLINE,
-                                        icon_color=ft.Colors.RED_600,
-                                        tooltip="Xóa màn hình",
-                                        on_click=lambda e, s=scr: handle_delete_screen(s),
-                                    ),
-                                ],
+                                spacing=theme.SPACE_4,
+                                controls=row_actions,
                             )
                         ),
                     ]
@@ -325,96 +392,72 @@ def build_view(page: ft.Page) -> ft.Column:
             )
 
         table_container.controls = [
-            ft.Row(
-                scroll=ft.ScrollMode.AUTO,
-                controls=[
-                    ft.DataTable(
-                        column_spacing=22,
-                        heading_row_height=44,
-                        data_row_min_height=48,
-                        columns=[
-                            ft.DataColumn(ft.Text("Mã thiết bị", weight=ft.FontWeight.BOLD)),
-                            ft.DataColumn(ft.Text("Tên màn hình LED", weight=ft.FontWeight.BOLD)),
-                            ft.DataColumn(ft.Text("Vị trí lắp đặt", weight=ft.FontWeight.BOLD)),
-                            ft.DataColumn(ft.Text("Kích thước", weight=ft.FontWeight.BOLD)),
-                            ft.DataColumn(ft.Text("Trạng thái", weight=ft.FontWeight.BOLD)),
-                            ft.DataColumn(ft.Text("Thao tác", weight=ft.FontWeight.BOLD)),
-                        ],
-                        rows=rows,
-                    )
+            create_styled_table(
+                columns=[
+                    ft.DataColumn(ft.Text("Mã thiết bị")),
+                    ft.DataColumn(ft.Text("Tên màn hình")),
+                    ft.DataColumn(ft.Text("Vị trí lắp đặt")),
+                    ft.DataColumn(ft.Text("Cấu hình")),
+                    ft.DataColumn(ft.Text("Trạng thái")),
+                    ft.DataColumn(ft.Text("Thao tác")),
                 ],
-            )
-            if rows
-            else ft.Container(
-                padding=30,
-                content=ft.Text("Không tìm thấy màn hình LED nào phù hợp với bộ lọc.", italic=True),
-            )
+                rows=rows,
+            ),
+            create_pagination_bar(len(filtered), cur_p, page_size, change_page),
         ]
         page.update()
 
     def on_search_change(e):
         filter_state["keyword"] = e.control.value or ""
+        filter_state["page"] = 1
         refresh_table()
 
     def on_status_change(e):
         filter_state["status"] = e.control.value or "Tất cả"
+        filter_state["page"] = 1
         refresh_table()
 
-    search_box = create_search_field("Tìm theo tên, mã thiết bị, vị trí...", on_search_change, width=320)
+    search_box = create_search_field("Tìm theo mã, tên màn hình, địa điểm...", on_search_change, width=300)
     status_filter = make_dropdown(
         label="Trạng thái",
         options=["Tất cả", "Online", "Offline", "Sự cố"],
         value="Tất cả",
         on_change=on_status_change,
-        width=180,
+        width=168,
     )
+
+    role = data.get_current_role()
+    header_actions = []
+    if permissions.can(role, "screens", "add"):
+        header_actions.append(
+            make_primary_button(
+                "Thêm màn hình",
+                icon_name=ft.Icons.ADD_OUTLINED,
+                on_click=lambda e: open_screen_form_dialog(None),
+            )
+        )
 
     refresh_table()
 
     return ft.Column(
         expand=True,
         scroll=ft.ScrollMode.AUTO,
-        spacing=16,
+        spacing=theme.SPACE_16,
         controls=[
             create_page_header(
                 title="Quản lý màn hình LED",
-                subtitle="Quản lý danh sách thiết bị, kích thước, vị trí lắp đặt và trạng thái kết nối.",
-                right_controls=[
-                    ft.FilledButton(
-                        "Thêm màn hình LED",
-                        icon=ft.Icons.ADD_TO_QUEUE,
-                        bgcolor=PRIMARY_COLOR,
-                        color=ft.Colors.WHITE,
-                        on_click=lambda e: open_screen_form_dialog(None),
-                    )
-                ],
+                subtitle="Danh sách điểm lắp đặt, cấu hình phần cứng và trạng thái kết nối.",
+                right_controls=header_actions,
             ),
-            ft.Card(
-                elevation=2,
-                content=ft.Container(
-                    padding=18,
-                    content=ft.Column(
-                        spacing=14,
-                        controls=[
-                            ft.Row(
-                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                wrap=True,
-                                controls=[
-                                    ft.Row(
-                                        spacing=12,
-                                        wrap=True,
-                                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                        controls=[search_box, status_filter],
-                                    ),
-                                    summary_text,
-                                ],
-                            ),
-                            ft.Divider(height=1),
-                            table_container,
-                        ],
-                    ),
+            make_surface_box(
+                padding=theme.SPACE_12,
+                content=ft.Row(
+                    spacing=theme.SPACE_12,
+                    wrap=True,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[search_box, status_filter],
                 ),
             ),
+            table_container,
         ],
     )

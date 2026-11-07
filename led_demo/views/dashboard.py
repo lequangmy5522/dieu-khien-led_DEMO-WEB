@@ -1,218 +1,224 @@
 import flet as ft
 import data
+import permissions
+import theme
 from components import (
-    PRIMARY_COLOR,
+    border_only,
     create_page_header,
     create_stat_card,
     create_status_badge,
+    create_styled_table,
+    make_primary_button,
+    make_surface_box,
     pad_sym,
+    show_snack,
 )
 
 
 def build_view(page: ft.Page, on_navigate=None) -> ft.Column:
-    """Xây dựng giao diện Tổng quan (Dashboard) tính toán trực tiếp từ dữ liệu giả lập."""
-    # Tính toán số liệu thực tế từ mock data
+    """Trang Tổng quan: thẻ số liệu thực tế, bảng thiết bị gần đây và danh sách nhật ký."""
+    role = data.get_current_role()
+    can_view_control = permissions.can(role, "control", "view")
+
     total_screens = len(data.SCREENS_DATA)
     online_screens = sum(1 for s in data.SCREENS_DATA if s["status"] == "Online")
-    offline_screens = sum(1 for s in data.SCREENS_DATA if s["status"] != "Online")
+    offline_screens = sum(1 for s in data.SCREENS_DATA if s["status"] == "Offline")
     issue_screens = sum(1 for s in data.SCREENS_DATA if s["status"] == "Sự cố")
     total_contents = len(data.CONTENTS_DATA)
     total_schedules = len(data.SCHEDULES_DATA)
     active_schedules = sum(1 for sch in data.SCHEDULES_DATA if sch["active"])
 
-    # 5 thẻ thống kê trên hàng ResponsiveRow
     stats_row = ft.ResponsiveRow(
-        spacing=12,
-        run_spacing=12,
+        spacing=theme.SPACE_16,
+        run_spacing=theme.SPACE_16,
         controls=[
             create_stat_card(
-                title="Tổng màn hình LED",
+                title="Tổng thiết bị",
                 value=total_screens,
-                icon_name=ft.Icons.TV_ROUNDED,
-                color=PRIMARY_COLOR,
-                subtitle="Trên toàn hệ thống",
+                icon_name=ft.Icons.TV_OUTLINED,
+                subtitle="3 khu vực vận hành",
                 col_Responsive={"sm": 6, "md": 4, "lg": 2.4},
             ),
             create_stat_card(
-                title="Đang Online",
+                title="Đang trực tuyến",
                 value=online_screens,
-                icon_name=ft.Icons.WIFI_TETHERING,
-                color=ft.Colors.GREEN_700,
-                subtitle="Hoạt động ổn định",
+                icon_name=ft.Icons.CHECK_CIRCLE_OUTLINE,
+                subtitle=f"Tỷ lệ {int(round(online_screens * 100 / max(1, total_screens)))}% toàn mạng",
                 col_Responsive={"sm": 6, "md": 4, "lg": 2.4},
             ),
             create_stat_card(
-                title="Offline / Sự cố",
-                value=offline_screens,
-                icon_name=ft.Icons.REPORT_PROBLEM_OUTLINED,
-                color=ft.Colors.RED_600,
-                subtitle=f"Trong đó {issue_screens} thiết bị sự cố",
+                title="Ngoại tuyến / Sự cố",
+                value=offline_screens + issue_screens,
+                icon_name=ft.Icons.WARNING_AMBER_OUTLINED,
+                subtitle=f"{offline_screens} Offline · {issue_screens} cần kiểm tra",
                 col_Responsive={"sm": 6, "md": 4, "lg": 2.4},
             ),
             create_stat_card(
-                title="Tổng số nội dung",
+                title="Tệp nội dung",
                 value=total_contents,
-                icon_name=ft.Icons.PERM_MEDIA_ROUNDED,
-                color=ft.Colors.INDIGO_600,
-                subtitle="Hình ảnh & Video",
+                icon_name=ft.Icons.FOLDER_OUTLINED,
+                subtitle="Lưu trữ nội bộ",
                 col_Responsive={"sm": 6, "md": 6, "lg": 2.4},
             ),
             create_stat_card(
-                title="Tổng lịch phát",
+                title="Lịch phát sóng",
                 value=total_schedules,
-                icon_name=ft.Icons.EVENT_AVAILABLE,
-                color=ft.Colors.TEAL_700,
-                subtitle=f"{active_schedules} lịch đang bật",
+                icon_name=ft.Icons.CALENDAR_TODAY_OUTLINED,
+                subtitle=f"{active_schedules} lịch đang kích hoạt",
                 col_Responsive={"sm": 12, "md": 6, "lg": 2.4},
             ),
         ],
     )
 
-    # Bảng danh sách màn hình LED gần đây (hiển thị 6 màn hình đầu)
-    recent_screens_rows = []
-    for scr in data.SCREENS_DATA[:6]:
-        recent_screens_rows.append(
+    # Bảng danh sách màn hình LED gần đây
+    recent_rows = []
+    for scr in data.SCREENS_DATA[:7]:
+        recent_rows.append(
             ft.DataRow(
                 cells=[
-                    ft.DataCell(ft.Text(scr["code"], weight=ft.FontWeight.W_600, size=13)),
-                    ft.DataCell(ft.Text(scr["name"], size=13)),
-                    ft.DataCell(ft.Text(scr["location"], size=12, color=ft.Colors.GREY_700)),
+                    ft.DataCell(ft.Text(scr["code"], size=theme.TEXT_14, weight=theme.WEIGHT_SEMI)),
+                    ft.DataCell(
+                        ft.Text(
+                            scr["name"],
+                            size=theme.TEXT_14,
+                            max_lines=1,
+                            overflow=ft.TextOverflow.ELLIPSIS,
+                            tooltip=scr["name"],
+                        )
+                    ),
                     ft.DataCell(create_status_badge(scr["status"])),
                     ft.DataCell(
                         ft.Text(
                             data.get_content_name(scr["current_content_id"]),
-                            size=12,
-                            italic=True,
+                            size=theme.TEXT_14,
+                            color=theme.text_secondary(),
+                            max_lines=1,
+                            overflow=ft.TextOverflow.ELLIPSIS,
                         )
                     ),
+                    ft.DataCell(ft.Text(f"{scr['temperature']}°C", size=theme.TEXT_14)),
                 ]
             )
         )
 
-    recent_screens_card = ft.Card(
+    recent_screens_section = make_surface_box(
         col={"sm": 12, "lg": 7},
-        elevation=2,
-        content=ft.Container(
-            padding=18,
-            content=ft.Column(
-                spacing=12,
-                controls=[
-                    ft.Row(
-                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        controls=[
-                            ft.Row(
-                                spacing=8,
-                                controls=[
-                                    ft.Icon(ft.Icons.DVR, color=PRIMARY_COLOR, size=20),
-                                    ft.Text("Danh sách màn hình LED gần đây", size=16, weight=ft.FontWeight.BOLD),
-                                ],
-                            ),
-                            ft.TextButton(
-                                "Xem tất cả",
-                                icon=ft.Icons.ARROW_FORWARD,
-                                on_click=lambda e: on_navigate(1) if on_navigate else None,
-                            ),
-                        ],
-                    ),
-                    ft.Divider(height=1),
-                    ft.Row(
-                        scroll=ft.ScrollMode.AUTO,
-                        controls=[
-                            ft.DataTable(
-                                column_spacing=18,
-                                heading_row_height=40,
-                                data_row_min_height=44,
-                                columns=[
-                                    ft.DataColumn(ft.Text("Mã TB", weight=ft.FontWeight.BOLD)),
-                                    ft.DataColumn(ft.Text("Tên màn hình", weight=ft.FontWeight.BOLD)),
-                                    ft.DataColumn(ft.Text("Vị trí", weight=ft.FontWeight.BOLD)),
-                                    ft.DataColumn(ft.Text("Trạng thái", weight=ft.FontWeight.BOLD)),
-                                    ft.DataColumn(ft.Text("Nội dung đang phát", weight=ft.FontWeight.BOLD)),
-                                ],
-                                rows=recent_screens_rows,
-                            )
-                        ],
-                    ),
-                ],
-            ),
+        padding=theme.SPACE_16,
+        content=ft.Column(
+            spacing=theme.SPACE_12,
+            controls=[
+                ft.Row(
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[
+                        ft.Text(
+                            "Trạng thái màn hình gần đây",
+                            size=theme.TEXT_16,
+                            weight=theme.WEIGHT_SEMI,
+                            color=theme.text_primary(),
+                        ),
+                        ft.TextButton(
+                            "Xem danh sách",
+                            on_click=lambda e: on_navigate(1) if on_navigate else None,
+                        ),
+                    ],
+                ),
+                create_styled_table(
+                    columns=[
+                        ft.DataColumn(ft.Text("Mã thiết bị")),
+                        ft.DataColumn(ft.Text("Tên màn hình")),
+                        ft.DataColumn(ft.Text("Trạng thái")),
+                        ft.DataColumn(ft.Text("Nội dung đang phát")),
+                        ft.DataColumn(ft.Text("Nhiệt độ"), numeric=True),
+                    ],
+                    rows=recent_rows,
+                ),
+            ],
         ),
     )
 
-    # Danh sách hoạt động gần đây (hiển thị 8 hoạt động mới nhất)
-    activity_items = []
-    for act in data.ACTIVITIES_DATA[:8]:
-        activity_items.append(
+    # Danh sách hoạt động gần đây dạng dòng kẻ mảnh
+    activity_controls = []
+    for idx, act in enumerate(data.ACTIVITIES_DATA[:8]):
+        is_last = idx == len(data.ACTIVITIES_DATA[:8]) - 1
+        activity_controls.append(
             ft.Container(
-                padding=pad_sym(horizontal=10, vertical=8),
-                border_radius=8,
-                content=ft.Row(
-                    vertical_alignment=ft.CrossAxisAlignment.START,
-                    spacing=10,
+                padding=pad_sym(vertical=theme.SPACE_8),
+                border=None
+                if is_last
+                else border_only(bottom=ft.BorderSide(theme.BORDER_WIDTH, theme.border_color())),
+                content=ft.Column(
+                    spacing=theme.SPACE_4,
                     controls=[
-                        ft.Icon(ft.Icons.HISTORY_TOGGLE_OFF, color=PRIMARY_COLOR, size=18),
-                        ft.Column(
-                            spacing=2,
-                            expand=True,
-                            controls=[
-                                ft.Text(act["action"], size=13),
-                                ft.Text(act["time"], size=11, color=ft.Colors.GREY_500),
-                            ],
-                        ),
+                        ft.Text(act["action"], size=theme.TEXT_14, color=theme.text_primary()),
+                        ft.Text(act["time"], size=theme.TEXT_12, color=theme.text_secondary()),
                     ],
                 ),
             )
         )
 
-    recent_activities_card = ft.Card(
+    recent_activities_section = make_surface_box(
         col={"sm": 12, "lg": 5},
-        elevation=2,
-        content=ft.Container(
-            padding=18,
-            content=ft.Column(
-                spacing=10,
-                controls=[
-                    ft.Row(
-                        spacing=8,
-                        controls=[
-                            ft.Icon(ft.Icons.NOTIFICATIONS_ACTIVE_OUTLINED, color=PRIMARY_COLOR, size=20),
-                            ft.Text("Hoạt động hệ thống gần đây", size=16, weight=ft.FontWeight.BOLD),
-                        ],
-                    ),
-                    ft.Divider(height=1),
-                    ft.Column(
-                        spacing=4,
-                        controls=activity_items,
-                    ),
-                ],
-            ),
+        padding=theme.SPACE_16,
+        content=ft.Column(
+            spacing=theme.SPACE_12,
+            controls=[
+                ft.Row(
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[
+                        ft.Text(
+                            "Hoạt động gần đây",
+                            size=theme.TEXT_16,
+                            weight=theme.WEIGHT_SEMI,
+                            color=theme.text_primary(),
+                        ),
+                        ft.Text(
+                            f"{len(data.ACTIVITIES_DATA)} bản ghi",
+                            size=theme.TEXT_12,
+                            color=theme.text_secondary(),
+                        ),
+                    ],
+                ),
+                ft.Column(spacing=0, controls=activity_controls),
+            ],
         ),
     )
+
+    def handle_go_control(e):
+        if not permissions.can(data.get_current_role(), "control", "view"):
+            show_snack(page, "Bạn không có quyền thực hiện thao tác này", is_error=True)
+            return
+        if on_navigate:
+            on_navigate(4)
+
+    header_actions = []
+    if can_view_control:
+        header_actions.append(
+            make_primary_button(
+                "Điều khiển màn hình",
+                icon_name=ft.Icons.TUNE_OUTLINED,
+                on_click=handle_go_control,
+            )
+        )
 
     return ft.Column(
         expand=True,
         scroll=ft.ScrollMode.AUTO,
-        spacing=16,
+        spacing=theme.SPACE_16,
         controls=[
             create_page_header(
-                title="Tổng quan hệ thống",
-                subtitle="Theo dõi nhanh số liệu màn hình LED, kho nội dung, lịch phát sóng và nhật ký hoạt động.",
-                right_controls=[
-                    ft.FilledButton(
-                        "Điều khiển nhanh",
-                        icon=ft.Icons.TUNE,
-                        bgcolor=PRIMARY_COLOR,
-                        color=ft.Colors.WHITE,
-                        on_click=lambda e: on_navigate(4) if on_navigate else None,
-                    ),
-                ],
+                title="Tổng quan",
+                subtitle="Số liệu vận hành hệ thống tính theo thời gian thực trong phiên làm việc.",
+                right_controls=header_actions,
             ),
             stats_row,
             ft.ResponsiveRow(
-                spacing=16,
-                run_spacing=16,
+                spacing=theme.SPACE_16,
+                run_spacing=theme.SPACE_16,
                 controls=[
-                    recent_screens_card,
-                    recent_activities_card,
+                    recent_screens_section,
+                    recent_activities_section,
                 ],
             ),
         ],

@@ -1,9 +1,12 @@
 import flet as ft
 import data
+import permissions
+import theme
 from components import (
-    PRIMARY_COLOR,
-    ALIGN_CENTER,
     border_only,
+    create_role_badge,
+    make_secondary_button,
+    pad_only,
     pad_sym,
     show_snack,
 )
@@ -19,70 +22,266 @@ from views import (
     settings,
 )
 
+# Danh sách 8 mục điều hướng gắn với khóa trang chuẩn trong permissions.py
+NAV_ITEMS = [
+    ("dashboard", "Tổng quan", ft.Icons.DASHBOARD_OUTLINED),
+    ("screens", "Quản lý màn hình LED", ft.Icons.TV_OUTLINED),
+    ("contents", "Quản lý nội dung", ft.Icons.FOLDER_OUTLINED),
+    ("schedules", "Lịch phát nội dung", ft.Icons.CALENDAR_TODAY_OUTLINED),
+    ("control", "Điều khiển màn hình", ft.Icons.TUNE_OUTLINED),
+    ("monitoring", "Giám sát thiết bị", ft.Icons.MONITOR_HEART_OUTLINED),
+    ("users", "Quản lý người dùng", ft.Icons.PEOPLE_OUTLINE),
+    ("settings", "Cài đặt hệ thống", ft.Icons.SETTINGS_OUTLINED),
+]
+
 
 def main(page: ft.Page):
-    """Hàm khởi tạo ứng dụng Điều khiển màn hình LED - Bản Demo Giao diện."""
-    page.title = "Hệ thống Điều khiển Màn hình LED Tập trung - VietLED Demo"
+    """Khởi tạo ứng dụng quản trị màn hình LED."""
+    page.title = "VietLED CMS - Quản trị hệ thống màn hình LED"
     page.padding = 0
     page.spacing = 0
 
-    # Thiết lập giao diện Sáng/Tối và bảng màu xanh dương đậm chủ đạo
-    page.theme_mode = (
-        ft.ThemeMode.DARK
-        if data.SYSTEM_SETTINGS["theme_mode"] == "dark"
-        else ft.ThemeMode.LIGHT
-    )
-    page.theme = ft.Theme(color_scheme_seed=PRIMARY_COLOR)
+    def sync_page_theme():
+        dark = theme.is_dark()
+        page.theme_mode = ft.ThemeMode.DARK if dark else ft.ThemeMode.LIGHT
+        page.bgcolor = theme.bg_color()
+        page.theme = ft.Theme(color_scheme_seed=theme.ACCENT)
+        page.dark_theme = ft.Theme(color_scheme_seed=theme.ACCENT_DARK)
 
-    # Trạng thái điều hướng hiện tại (0 -> 7 tương ứng 8 mục trên NavigationRail)
-    state = {"selected_index": 0}
+    sync_page_theme()
 
-    # Vùng chứa nội dung chính bên phải sidebar
+    state = {"selected_index": 0, "in_shell": False}
+
     content_area = ft.Container(
         expand=True,
-        padding=20,
+        padding=theme.SPACE_24,
+        bgcolor=theme.bg_color(),
     )
 
-    # Nhãn hiển thị tên & vai trò người dùng trên thanh Header
-    user_info_text = ft.Text("", weight=ft.FontWeight.W_600, size=14)
-    user_role_text = ft.Text("", size=12, color=ft.Colors.GREY_600)
+    sidebar_items_col = ft.Column(spacing=theme.SPACE_4)
+    sidebar_container = ft.Container(width=theme.SIDEBAR_WIDTH)
+    top_header = ft.Container(height=theme.HEADER_HEIGHT)
+
+    user_info_text = ft.Text("", size=theme.TEXT_14, weight=theme.WEIGHT_SEMI)
+    role_badge_holder = ft.Container()
 
     def apply_theme(is_dark: bool):
-        """Chuyển đổi giao diện Sáng / Tối ngay lập tức."""
+        """Đổi chế độ Sáng/Tối và vẽ lại toàn bộ khung giao diện ngay lập tức."""
         data.SYSTEM_SETTINGS["theme_mode"] = "dark" if is_dark else "light"
-        page.theme_mode = ft.ThemeMode.DARK if is_dark else ft.ThemeMode.LIGHT
-        theme_btn.icon = ft.Icons.DARK_MODE if is_dark else ft.Icons.LIGHT_MODE
-        theme_btn.tooltip = "Đang ở chế độ Tối (Nhấn để chuyển Sáng)" if is_dark else "Đang ở chế độ Sáng (Nhấn để chuyển Tối)"
-        page.update()
+        sync_page_theme()
+        if state["in_shell"]:
+            rebuild_shell_chrome()
+            navigate_to(state["selected_index"])
+        else:
+            show_login_screen()
 
     def handle_toggle_theme(e):
-        is_currently_dark = page.theme_mode == ft.ThemeMode.DARK
-        apply_theme(not is_currently_dark)
-        mode_label = "Tối (Dark Mode)" if not is_currently_dark else "Sáng (Light Mode)"
-        show_snack(page, f"Đã chuyển sang giao diện {mode_label}")
-
-    theme_btn = ft.IconButton(
-        icon=ft.Icons.LIGHT_MODE,
-        tooltip="Chuyển đổi giao diện Sáng/Tối",
-        on_click=handle_toggle_theme,
-    )
+        new_dark = not theme.is_dark()
+        apply_theme(new_dark)
+        show_snack(page, f"Đã chuyển sang chế độ {'Tối' if new_dark else 'Sáng'}.")
 
     def handle_logout(e=None):
-        """Đăng xuất khỏi phiên làm việc và quay về màn hình đăng nhập."""
-        data.log_activity(f"{data.CURRENT_USER['full_name']} đã đăng xuất khỏi hệ thống.")
+        """Đăng xuất về màn hình đăng nhập."""
+        data.log_activity("Đã đăng xuất khỏi hệ thống.")
+        state["in_shell"] = False
+        state["selected_index"] = 0
         show_login_screen()
-        show_snack(page, "Đã đăng xuất thành công!")
+        show_snack(page, "Đã đăng xuất khỏi phiên làm việc.")
 
     def refresh_header_user():
-        """Cập nhật tên và vai trò người dùng đang đăng nhập trên Header."""
-        user_info_text.value = data.CURRENT_USER.get("full_name", "Quản trị viên")
-        user_role_text.value = f"{data.CURRENT_USER.get('role', 'Quản trị viên')} ({data.CURRENT_USER.get('username', 'admin')})"
+        """Cập nhật họ tên và huy hiệu vai trò ở thanh Header."""
+        user_info_text.value = data.CURRENT_USER.get("full_name", "Người dùng")
+        user_info_text.color = theme.text_primary()
+        role_badge_holder.content = create_role_badge(data.get_current_role())
+
+    def build_sidebar_items():
+        """Chỉ dựng các mục menu nằm trong danh sách visible_pages(role)."""
+        items = []
+        cur_idx = state["selected_index"]
+        allowed_pages = set(permissions.visible_pages(data.get_current_role()))
+
+        for idx, (page_key, label, icon_name) in enumerate(NAV_ITEMS):
+            if page_key not in allowed_pages:
+                continue
+
+            is_active = idx == cur_idx
+            left_bar_color = theme.accent_color() if is_active else ft.Colors.TRANSPARENT
+            bg_c = theme.accent_subtle() if is_active else ft.Colors.TRANSPARENT
+            fg_c = theme.accent_color() if is_active else theme.text_primary()
+            ic_c = theme.accent_color() if is_active else theme.text_secondary()
+            fw = theme.WEIGHT_SEMI if is_active else theme.WEIGHT_NORMAL
+
+            items.append(
+                ft.Container(
+                    bgcolor=bg_c,
+                    border=border_only(
+                        left=ft.BorderSide(theme.SIDEBAR_INDIC_WIDTH, left_bar_color)
+                    ),
+                    padding=pad_sym(horizontal=theme.SPACE_16, vertical=theme.SPACE_12),
+                    ink=True,
+                    on_click=lambda e, i=idx: navigate_to(i),
+                    content=ft.Row(
+                        spacing=theme.SPACE_12,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        controls=[
+                            ft.Icon(icon_name, size=theme.ICON_SM, color=ic_c),
+                            ft.Text(
+                                label,
+                                size=theme.TEXT_14,
+                                weight=fw,
+                                color=fg_c,
+                                expand=True,
+                            ),
+                        ],
+                    ),
+                )
+            )
+        sidebar_items_col.controls = items
+
+    def rebuild_shell_chrome():
+        """Cập nhật màu nền, viền và danh sách menu của Sidebar + Header."""
+        refresh_header_user()
+        build_sidebar_items()
+
+        sidebar_container.bgcolor = theme.surface_color()
+        sidebar_container.border = border_only(
+            right=ft.BorderSide(theme.BORDER_WIDTH, theme.border_color())
+        )
+        sidebar_container.content = ft.Column(
+            expand=True,
+            spacing=0,
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            controls=[
+                ft.Column(
+                    spacing=0,
+                    controls=[
+                        ft.Container(
+                            height=theme.HEADER_HEIGHT,
+                            padding=pad_sym(horizontal=theme.SPACE_16),
+                            border=border_only(
+                                bottom=ft.BorderSide(theme.BORDER_WIDTH, theme.border_color())
+                            ),
+                            content=ft.Row(
+                                spacing=theme.SPACE_8,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                controls=[
+                                    ft.Container(
+                                        width=theme.SPACE_24,
+                                        height=theme.SPACE_24,
+                                        border_radius=theme.RADIUS_INPUT,
+                                        bgcolor=theme.accent_color(),
+                                        alignment=ft.Alignment.CENTER
+                                        if hasattr(ft.Alignment, "CENTER")
+                                        else ft.alignment.center,
+                                        content=ft.Text(
+                                            "VL",
+                                            size=theme.TEXT_12,
+                                            weight=theme.WEIGHT_SEMI,
+                                            color=theme.WHITE,
+                                        ),
+                                    ),
+                                    ft.Text(
+                                        "VietLED CMS",
+                                        size=theme.TEXT_16,
+                                        weight=theme.WEIGHT_SEMI,
+                                        color=theme.text_primary(),
+                                    ),
+                                ],
+                            ),
+                        ),
+                        ft.Container(
+                            padding=pad_only(top=theme.SPACE_8),
+                            content=sidebar_items_col,
+                        ),
+                    ],
+                ),
+                ft.Container(
+                    padding=theme.SPACE_16,
+                    border=border_only(
+                        top=ft.BorderSide(theme.BORDER_WIDTH, theme.border_color())
+                    ),
+                    content=ft.Text(
+                        "Phiên bản nội bộ v2.4",
+                        size=theme.TEXT_12,
+                        color=theme.text_secondary(),
+                    ),
+                ),
+            ],
+        )
+
+        top_header.bgcolor = theme.surface_color()
+        top_header.padding = pad_sym(horizontal=theme.SPACE_24)
+        top_header.border = border_only(
+            bottom=ft.BorderSide(theme.BORDER_WIDTH, theme.border_color())
+        )
+        top_header.content = ft.Row(
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[
+                ft.Text(
+                    "Hệ thống quản lý vận hành màn hình LED",
+                    size=theme.TEXT_14,
+                    color=theme.text_secondary(),
+                ),
+                ft.Row(
+                    spacing=theme.SPACE_16,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[
+                        ft.IconButton(
+                            icon=ft.Icons.DARK_MODE_OUTLINED
+                            if not theme.is_dark()
+                            else ft.Icons.LIGHT_MODE_OUTLINED,
+                            icon_size=theme.ICON_SM,
+                            icon_color=theme.text_secondary(),
+                            tooltip="Đổi giao diện Sáng / Tối",
+                            on_click=handle_toggle_theme,
+                        ),
+                        ft.Row(
+                            spacing=theme.SPACE_8,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            controls=[
+                                user_info_text,
+                                role_badge_holder,
+                            ],
+                        ),
+                        make_secondary_button(
+                            "Đăng xuất",
+                            icon_name=ft.Icons.LOGOUT_OUTLINED,
+                            on_click=handle_logout,
+                        ),
+                    ],
+                ),
+            ],
+        )
+        content_area.bgcolor = theme.bg_color()
+
+    def on_user_or_profile_updated():
+        """Cập nhật lại Header và Sidebar khi thông tin hoặc vai trò người dùng thay đổi."""
+        refresh_header_user()
+        build_sidebar_items()
+        page.update()
 
     def navigate_to(index: int):
-        """Chuyển sang phân hệ tương ứng theo chỉ số (0 -> 7)."""
+        """Điều hướng giữa 8 phân hệ có kiểm tra quyền truy cập."""
+        role = data.get_current_role()
+        allowed_pages = permissions.visible_pages(role)
+
+        if index < 0 or index >= len(NAV_ITEMS):
+            index = 0
+
+        target_page_key = NAV_ITEMS[index][0]
+        if target_page_key not in allowed_pages:
+            state["selected_index"] = 0
+            refresh_header_user()
+            build_sidebar_items()
+            content_area.content = dashboard.build_view(page, on_navigate=navigate_to)
+            page.update()
+            show_snack(page, "Bạn không có quyền thực hiện thao tác này", is_error=True)
+            return
+
         state["selected_index"] = index
-        nav_rail.selected_index = index
         refresh_header_user()
+        build_sidebar_items()
 
         view_builders = {
             0: lambda: dashboard.build_view(page, on_navigate=navigate_to),
@@ -91,161 +290,30 @@ def main(page: ft.Page):
             3: lambda: schedules.build_view(page),
             4: lambda: control.build_view(page),
             5: lambda: monitoring.build_view(page),
-            6: lambda: users.build_view(page, on_user_updated=refresh_header_user),
+            6: lambda: users.build_view(page, on_user_updated=on_user_or_profile_updated),
             7: lambda: settings.build_view(
                 page,
                 on_theme_change=apply_theme,
                 on_logout=handle_logout,
-                on_profile_updated=refresh_header_user,
+                on_profile_updated=on_user_or_profile_updated,
             ),
         }
         builder = view_builders.get(index, view_builders[0])
         content_area.content = builder()
         page.update()
 
-    # Thanh điều hướng bên trái (NavigationRail) gồm đúng 8 mục theo thứ tự yêu cầu
-    nav_rail = ft.NavigationRail(
-        selected_index=0,
-        label_type=ft.NavigationRailLabelType.ALL,
-        min_width=105,
-        min_extended_width=230,
-        extended=True,
-        group_alignment=-0.9,
-        leading=ft.Container(
-            padding=pad_sym(horizontal=12, vertical=14),
-            content=ft.Row(
-                controls=[
-                    ft.Container(
-                        width=38,
-                        height=38,
-                        border_radius=10,
-                        bgcolor=PRIMARY_COLOR,
-                        alignment=ALIGN_CENTER,
-                        content=ft.Icon(ft.Icons.TV_ROUNDED, color=ft.Colors.WHITE, size=22),
-                    ),
-                    ft.Column(
-                        controls=[
-                            ft.Text("VIETLED CMS", weight=ft.FontWeight.BOLD, size=16, color=PRIMARY_COLOR),
-                            ft.Text("Điều khiển LED tập trung", size=11, color=ft.Colors.GREY_600),
-                        ],
-                        spacing=1,
-                    ),
-                ],
-                spacing=10,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-        ),
-        destinations=[
-            ft.NavigationRailDestination(
-                icon=ft.Icons.DASHBOARD_OUTLINED,
-                selected_icon=ft.Icons.DASHBOARD,
-                label="Tổng quan",
-            ),
-            ft.NavigationRailDestination(
-                icon=ft.Icons.TV_OUTLINED,
-                selected_icon=ft.Icons.TV,
-                label="Quản lý màn hình LED",
-            ),
-            ft.NavigationRailDestination(
-                icon=ft.Icons.PERM_MEDIA_OUTLINED,
-                selected_icon=ft.Icons.PERM_MEDIA,
-                label="Quản lý nội dung",
-            ),
-            ft.NavigationRailDestination(
-                icon=ft.Icons.CALENDAR_MONTH_OUTLINED,
-                selected_icon=ft.Icons.CALENDAR_MONTH,
-                label="Lịch phát nội dung",
-            ),
-            ft.NavigationRailDestination(
-                icon=ft.Icons.TUNE_OUTLINED,
-                selected_icon=ft.Icons.TUNE,
-                label="Điều khiển màn hình",
-            ),
-            ft.NavigationRailDestination(
-                icon=ft.Icons.MONITOR_HEART_OUTLINED,
-                selected_icon=ft.Icons.MONITOR_HEART,
-                label="Giám sát thiết bị",
-            ),
-            ft.NavigationRailDestination(
-                icon=ft.Icons.PEOPLE_OUTLINE,
-                selected_icon=ft.Icons.PEOPLE,
-                label="Quản lý người dùng",
-            ),
-            ft.NavigationRailDestination(
-                icon=ft.Icons.SETTINGS_OUTLINED,
-                selected_icon=ft.Icons.SETTINGS,
-                label="Cài đặt hệ thống",
-            ),
-        ],
-        on_change=lambda e: navigate_to(e.control.selected_index),
-    )
-
-    # Thanh Header phía trên hiển thị người dùng đang đăng nhập và nút Đăng xuất
-    top_header = ft.Container(
-        height=64,
-        padding=pad_sym(horizontal=24, vertical=8),
-        border=border_only(bottom=ft.BorderSide(1, ft.Colors.GREY_300)),
-        content=ft.Row(
-            controls=[
-                ft.Row(
-                    controls=[
-                        ft.Icon(ft.Icons.CAST_CONNECTED, color=PRIMARY_COLOR, size=22),
-                        ft.Text(
-                            "HỆ THỐNG QUẢN TRỊ & ĐIỀU KHIỂN MÀN HÌNH LED",
-                            weight=ft.FontWeight.BOLD,
-                            size=15,
-                        ),
-                    ],
-                    spacing=10,
-                ),
-                ft.Row(
-                    controls=[
-                        theme_btn,
-                        ft.Container(
-                            padding=pad_sym(horizontal=10, vertical=4),
-                            border_radius=8,
-                            content=ft.Row(
-                                controls=[
-                                    ft.CircleAvatar(
-                                        bgcolor=PRIMARY_COLOR,
-                                        radius=16,
-                                        content=ft.Icon(ft.Icons.PERSON, color=ft.Colors.WHITE, size=18),
-                                    ),
-                                    ft.Column(
-                                        controls=[user_info_text, user_role_text],
-                                        spacing=0,
-                                        alignment=ft.MainAxisAlignment.CENTER,
-                                    ),
-                                ],
-                                spacing=8,
-                            ),
-                        ),
-                        ft.OutlinedButton(
-                            "Đăng xuất",
-                            icon=ft.Icons.LOGOUT,
-                            on_click=handle_logout,
-                        ),
-                    ],
-                    spacing=10,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
-            ],
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        ),
-    )
-
     def show_main_shell():
-        """Hiển thị bố cục chính gồm Sidebar bên trái, Header phía trên và vùng nội dung."""
+        """Dựng lại toàn bộ bố cục chính theo vai trò mới sau khi đăng nhập."""
+        state["in_shell"] = True
+        state["selected_index"] = 0
         page.controls.clear()
-        refresh_header_user()
+        rebuild_shell_chrome()
         page.add(
             ft.Row(
                 expand=True,
                 spacing=0,
                 controls=[
-                    nav_rail,
-                    ft.VerticalDivider(width=1, thickness=1),
+                    sidebar_container,
                     ft.Column(
                         expand=True,
                         spacing=0,
@@ -260,12 +328,12 @@ def main(page: ft.Page):
         navigate_to(0)
 
     def show_login_screen():
-        """Hiển thị màn hình đăng nhập Demo."""
+        """Hiển thị màn hình đăng nhập."""
+        state["in_shell"] = False
         page.controls.clear()
         page.add(login.build_view(page, on_login_success=show_main_shell))
         page.update()
 
-    # Khởi chạy ở màn hình Đăng nhập Demo
     show_login_screen()
 
 
